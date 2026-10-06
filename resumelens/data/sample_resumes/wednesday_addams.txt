@@ -1,0 +1,7 @@
+Wednesday Addams
+Email: wednesday@example.com
+Phone: +573001234567
+Portfolio: https://portfolio.example.com
+Technical Skills: JS, React.js, NodeJS, Postgres, Git.
+Education: BS in Computer Science.
+Experience: 3 years of experience in full-stack development.

@@ -1,0 +1,6 @@
+Mary Jane Watson
+Email: mary@example.com
+Phone: +12125550123
+Skills: Python, pandas, scikit-learn, TensorFlow, PostgreSQL, Git.
+Education: MSc in Data Science.
+Experience: 4 years of experience in machine learning.

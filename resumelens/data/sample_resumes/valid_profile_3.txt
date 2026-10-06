@@ -1,0 +1,5 @@
+Alex Rivera
+Email: alex.rivera@example.com
+Technical Skills: Java, Spring Boot, Docker, Git, SQL, REST APIs.
+Education: BSc in Software Engineering.
+Experience: 5 years of experience in backend systems and DevOps tooling.

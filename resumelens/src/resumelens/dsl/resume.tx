@@ -1,0 +1,59 @@
+ResumeModel:
+    candidate = Candidate
+    contact = ContactInfo
+    experiences += ExperienceEntry[1..*]
+    educations += EducationEntry[1..*]
+    skills += SkillEntry[1..*]
+    classification = ClassificationResult
+;
+
+Candidate:
+    'candidate' name=STRING
+;
+
+ContactInfo:
+    'email' email=EMAIL
+    'phone' phone=PHONE
+    ('links' links+=URL[1..*])?
+;
+
+ExperienceEntry:
+    'experience' role=STRING 'years' years=NUMBER
+;
+
+EducationEntry:
+    'education' degree=STRING 'institution' institution=STRING
+;
+
+SkillEntry:
+    'skill' value=ID
+;
+
+ClassificationResult:
+    'profile' profile_name=ID
+    'status' status=('ACCEPTED' | 'REJECTED')
+;
+
+EMAIL:
+    /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/
+;
+
+PHONE:
+    /\+?[0-9()\-\s]{7,}/
+;
+
+URL:
+    /https?:\/\/\S+|www\.\S+/
+;
+
+NUMBER:
+    /[0-9]+/
+;
+
+STRING:
+    /"[^"]*"|\'[^\']*\'/
+;
+
+ID:
+    /[A-Za-z_][A-Za-z0-9_\-]*/
+;

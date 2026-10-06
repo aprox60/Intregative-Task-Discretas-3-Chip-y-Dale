@@ -1,0 +1,5 @@
+Nina Patel
+Email: nina.patel@example.com
+Technical Skills: Python, PyTorch, scikit-learn, PostgreSQL, Git, SQL.
+Education: MSc in Artificial Intelligence.
+Experience: 3 years of experience in NLP and data pipelines.

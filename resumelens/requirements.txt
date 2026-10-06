@@ -1,0 +1,4 @@
+pyformlang==1.0.11
+textX>=4.0.0
+pytest>=8.0.0
+graphviz>=0.20.0

@@ -1,0 +1,13 @@
+{
+  "name": "FULL_STACK_DEVELOPER",
+  "required_tokens": ["JAVASCRIPT", "REACT", "NODE_JS", "POSTGRESQL", "GIT"],
+  "sequence": [
+    ["JAVASCRIPT", "TYPESCRIPT"],
+    ["REACT", "ANGULAR", "VUE"],
+    ["NODE_JS", "DJANGO", "SPRING_BOOT"],
+    ["SQL", "POSTGRESQL", "MONGODB"],
+    ["REST"],
+    ["GIT"]
+  ],
+  "description": "Full stack developer profile with frontend, backend, storage, and Git evidence."
+}

@@ -1,0 +1,12 @@
+{
+  "name": "MACHINE_LEARNING_ENGINEER",
+  "required_tokens": ["PYTHON", "PANDAS", "SCIKIT_LEARN", "POSTGRESQL", "GIT"],
+  "sequence": [
+    ["PYTHON"],
+    ["PANDAS", "NUMPY"],
+    ["SCIKIT_LEARN", "TENSORFLOW", "PYTORCH"],
+    ["SQL", "POSTGRESQL"],
+    ["GIT"]
+  ],
+  "description": "Machine learning engineer profile with Python, data science libraries, ML frameworks, SQL, and Git."
+}
