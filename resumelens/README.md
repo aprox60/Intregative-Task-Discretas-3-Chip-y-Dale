@@ -3,8 +3,8 @@
 This project is a university skeleton for the ICESI 2026-2 Integrative Task 1 in Computación y Estructuras Discretas III. The objective is to build a formal-language pipeline that checks whether an explicit qualification pattern is present in a résumé, without ranking candidates or making hiring decisions.
 
 ## Team and environment
-- IDE: VS Code / PyCharm (to be confirmed by the team)
-- Team members: TODO - Student 1, TODO - Student 2
+- IDE: Visual Studio Code
+- Team members: Ivan Quintero Sanchez, Valeria Valencia
 - Course: Computación y Estructuras Discretas III
 - Institution: ICESI
 - Academic period: 2026-2

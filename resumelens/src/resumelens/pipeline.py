@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from resumelens.classification.classifier import classify_all_profiles
 from resumelens.dsl.generator import candidate_to_dsl
 from resumelens.dsl.visualizer import render_html
@@ -9,38 +7,32 @@ from resumelens.normalization.lexicon import normalize_tokens
 from resumelens.normalization.sorter import sort_candidates
 
 
-def run_resume_pipeline(raw_text: str, profile_name: str | None = None) -> PipelineResult:
-    """Run the full ResumeLens pipeline on a raw résumé string.
-
-    The pipeline intentionally uses the generic profile abstraction described in the
-    assignment: one pipeline, multiple profile checks, and explicit pattern validation only.
-    """
-
+def run_resume_pipeline(raw_text, profile_name=None):
+    # Runs all the stages over the text of one resume
     extracted = ResumeExtractor(raw_text).extract()
-    skill_tokens = extracted.get("skills", [])
-    normalized = normalize_tokens(skill_tokens)
+    normalized = normalize_tokens(extracted.get_all_technical_strings())
     ordered = sort_candidates(normalized, profile_name)
     classification = classify_all_profiles(ordered)
 
-    candidate = Candidate(
-        full_name="Candidate",
-        email=extracted.get("email", ["example@example.com"])[0] if extracted.get("email") else "example@example.com",
-        phone=extracted.get("phone", ["+0000000000"])[0] if extracted.get("phone") else "+0000000000",
-        links=extracted.get("links", []),
-        skills=ordered,
-        academic_qualifications=extracted.get("academic_qualifications", []),
-        experience=extracted.get("experience", []),
-        profile_results=classification,
-    )
+    name = extracted.name
+    if name == "":
+        name = "Candidate"
+    email = "example@example.com"
+    if len(extracted.emails) > 0:
+        email = extracted.emails[0]
+    phone = "+0000000000"
+    if len(extracted.phones) > 0:
+        phone = extracted.phones[0]
+
+    qualifications = []
+    for entry in extracted.education:
+        qualifications.append(entry.degree + " in " + entry.field)
+    experience = []
+    for entry in extracted.experience:
+        experience.append(str(entry.years) + " years - " + entry.description)
+
+    candidate = Candidate(name, email, phone, extracted.links, ordered, qualifications, experience, classification)
 
     dsl_text = candidate_to_dsl(candidate)
     html = render_html(candidate)
-    return PipelineResult(
-        candidate=candidate,
-        extracted=extracted,
-        normalized_tokens=ordered,
-        classification=classification,
-        dsl_text=dsl_text,
-        html=html,
-        notes=["Pipeline executed successfully.", "Pattern-based classification only."],
-    )
+    return PipelineResult(candidate, extracted, ordered, classification, dsl_text, html)
