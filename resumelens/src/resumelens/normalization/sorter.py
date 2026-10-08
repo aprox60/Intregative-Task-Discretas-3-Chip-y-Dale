@@ -1,52 +1,26 @@
-from __future__ import annotations
-
-from resumelens.normalization.lexicon import normalize_token
-
-PROFILE_SORT_ORDERS = {
-    "FULL_STACK_DEVELOPER": [
-        "JAVASCRIPT",
-        "REACT",
-        "NODE_JS",
-        "POSTGRESQL",
-        "GIT",
-        "SQL",
-        "DJANGO",
-        "SPRING_BOOT",
-    ],
-    "MACHINE_LEARNING_ENGINEER": [
-        "PYTHON",
-        "PANDAS",
-        "NUMPY",
-        "SCIKIT_LEARN",
-        "TENSORFLOW",
-        "PYTORCH",
-        "SQL",
-        "POSTGRESQL",
-        "GIT",
-    ],
-}
+# Stage 2: puts the normalized tokens in the canonical order of a profile.
+#
+# The order is the order of the profile groups (for Full Stack: frontend language,
+# frontend framework, backend, database, API, version control). Inside a group, the
+# order in which the tokens are written in the JSON file.
+# Tokens that are not part of the profile are left out, so the automaton only reads
+# symbols of its own alphabet. This way the result does not depend on the order in
+# which the candidate wrote the skills.
+#
+# Example (Full Stack): GIT, NODE_JS, JAVASCRIPT, POSTGRESQL, REACT
+#                    -> JAVASCRIPT, REACT, NODE_JS, POSTGRESQL, GIT
 
 
-def sort_tokens(tokens: list[str], profile_name: str) -> list[str]:
-    """Sort canonical tokens according to a profile-specific order.
+def sort_for_profile(tokens, profile):
+    sorted_tokens = []
+    for token in profile.get_alphabet():
+        if token in tokens:
+            sorted_tokens.append(token)
+    return sorted_tokens
 
-    The profile order is intentionally explicit and deterministic. This ensures that the
-    automata operate on a consistent sequence before classification.
-    """
 
-    canonical_tokens = [normalize_token(token) for token in tokens]
-    order = PROFILE_SORT_ORDERS.get(profile_name.upper(), [])
-    if not order:
-        return sorted(set(canonical_tokens))
-
-    ranked = {token: index for index, token in enumerate(order)}
-    result = sorted(set(canonical_tokens), key=lambda token: (ranked.get(token, len(order)), token))
+def sort_for_all_profiles(tokens, profiles):
+    result = {}
+    for name in profiles:
+        result[name] = sort_for_profile(tokens, profiles[name])
     return result
-
-
-def sort_candidates(tokens: list[str], profile_name: str | None = None) -> list[str]:
-    """Sort tokens for a chosen profile or for the default ordering if no profile is provided."""
-
-    if profile_name is None:
-        return sorted(set(tokens))
-    return sort_tokens(tokens, profile_name)
