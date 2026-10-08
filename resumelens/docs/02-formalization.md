@@ -1,24 +1,167 @@
 # Formalization
 
-## 1. Regex languages and extraction
+## 1. Regular expressions (stage 1: extraction)
 
-The extraction stage uses Python `re` to detect lexical features in natural-language resumes. The goal is to find explicit textual evidence without deciding equivalence or fit.
+Implementation: `src/resumelens/extraction/patterns.py` (the patterns) and `src/resumelens/extraction/extractor.py` (where they are applied).
 
-| Pattern name | Regex pattern | Language recognized | Notes |
-| --- | --- | --- | --- |
-| Email | `(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b` | Email addresses | Matches standard email addresses. |
-| Phone | `(?i)(?:\+?\d{1,3}[-.\s]?)?(?:\(?\d{2,4}\)?[-.\s]?)\d{3}[-.\s]?\d{4}` | Phone numbers | Accepts common formatting variations. |
-| URL | `(?i)https?://\S+|www\.\S+` | Hyperlinks | Matches web URLs and www links. |
-| Programming language | `(?i)\b(python|javascript|js|java|c\+\+|c#|ruby|php|go|rust|swift|typescript|typescriptcript)\b` | Programming languages | Raw match only; no normalization at this stage. |
-| Framework | `(?i)\b(react|react\.js|node\.js|django|spring\s*boot|flask|angular|vue|pandas|scikit\-learn|tensorflow)\b` | Frameworks and libraries | Captures common examples. |
-| Database | `(?i)\b(postgres|postgresql|mysql|mongodb|sqlite|redis|sql)\b` | Database technologies | Base evidence for profile patterns. |
-| Tool | `(?i)\b(git|docker|kubernetes|linux|aws|azure|jenkins|figma)\b` | Tools and technologies | Generic category for platform tooling. |
-| Academic qualification | `(?i)\b(bsc|bs|ba|msc|m\.sc|phd|master\s*degree|bachelor\s*degree)\b` | Education credentials | Used to detect explicit education lines. |
-| Experience | `(?i)(\d+(?:\.\d+)?)\s*(?:years?|yrs?)\s*(?:of\s+)?experience` | Experience durations | Stores duration evidence, not profile fit. |
+Each regular expression $r$ denotes a regular language $L(r) \subseteq \Sigma^*$, where $\Sigma$ is the set of characters that can appear in a résumé. The extractor returns every non-overlapping substring of the résumé that belongs to $L(r)$ (`re.finditer`). This stage does **not** decide whether two strings are equivalent (stage 2) or whether a candidate fits a profile (stage 3).
 
-### Regex note
+### Design decisions
 
-The extracted data should be kept as raw strings. This ensures the later normalization stage can decide canonical forms without losing the original lexical evidence.
+- **One category, one transducer.** Each technical category (`programming_languages`, `frameworks`, `libraries`, `databases`, `tools`, `other_qualifications`) has its own regex, and in stage 2 its own transducer. That keeps each formal model small enough to draw.
+- **Our own word boundaries.** Python's `\b` does not work with names like `Node.js` or `C#`, because `.`, `+` and `#` are not word characters. We use `BEFORE = (?<![\w+#&.])` and `AFTER = (?![\w+#&]|\.\w)`. Because of `BEFORE`, the `JS` inside `Node.JS` is not taken as a language. Because of `AFTER`, `github` inside `github.com/...` is not taken as the tool Git.
+- **Optional separators.** `SEP = [\s.\-]?` lets one pattern accept `Scikit-learn`, `scikit learn` and `scikitlearn`.
+- **Short names are case-sensitive.** `JS`, `TS`, `Go`, `R`, `REST` and `Express` are also ordinary words (*go home*, *the rest*, *R&D*), so they have a separate regex without `re.IGNORECASE` and only match with that exact capitalization. Every other technical regex is case-insensitive.
+- **Longest match wins.** When two regexes of the same category match at overlapping positions (`REST` and `REST APIs`), only the longest one is kept (`find_all_in_order`).
+- **Named groups.** Education and experience use named groups (`degree`, `field`, `institution`, `years`, `description`), so the result goes straight into the DSL in stage 4.
+- **Output.** An `ExtractionResult` object (`src/resumelens/models.py`). `ResumeExtractor.save_json(path)` saves it as JSON.
+
+### Known limitations
+
+- A date written as `2019.10.07` can match the phone pattern.
+- The name is only detected when it is the first non-empty line.
+- Spellings that are not listed (e.g. `ECMAScript`) are not extracted. If they appear under `Skills:`, they show up in `get_unrecognized_skills()`.
+
+### Example (assignment fragment)
+
+Input:
+
+```text
+Wednesday Addams
+3 years of experience developing web applications.
+Technical Skills:
+JS, React.js, NodeJS, Postgres, Git.
+```
+
+Output of `get_all_technical_strings()`: `["JS", "React.js", "NodeJS", "Postgres", "Git"]`. This is the input of stage 2.
+
+### Patterns
+
+#### `name`
+
+**Language recognized:** Two to five capitalized words separated by spaces. It is only checked against the first non-empty line.
+
+```regex
+[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]+(\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]+){1,4}
+```
+
+#### `emails`
+
+**Language recognized:** local part, '@', domain labels separated by dots and a top level domain of 2 or more letters.
+
+```regex
+(?<![\w.+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}(?![\w-])
+```
+
+#### `phones`
+
+**Language recognized:** Optional '+', then a prefix (can be in parentheses) followed by 2 to 4 digit blocks, each one after exactly one space, dot or hyphen. Or 7 to 15 digits together.
+
+```regex
+(?<![\w+])(\+?\(?\d{1,4}\)?([\s.\-]\d{2,4}){2,4}|\+?\d{7,15})(?!\w)
+```
+
+#### `links`
+
+**Language recognized:** Text that starts with http://, https:// or www. (or linkedin.com/, github.com/) until the next space or comma.
+
+```regex
+(https?://|www\.)[^\s,;]*[^\s,;.]|(?<![\w.])(linkedin|github)\.com/[^\s,;]*[^\s,;.]
+```
+
+#### `programming_languages`
+
+**Language recognized:** JavaScript, TypeScript, Python, Java, Go, Kotlin, C# and R with their usual spellings. JS, TS, Go and R only with that exact capitalization.
+
+```regex
+(?<![\w+#&.])(java[\s\-]?script|type[\s\-]?script|python(\s?3)?|java|golang|kotlin|c\s?#|c[\s\-]sharp|csharp)(?![\w+#&]|\.\w)
+```
+_(case-insensitive)_
+
+```regex
+(?<![\w+#&.])(JS|TS|Go|R)(?![\w+#&]|\.\w)
+```
+_(case-sensitive)_
+
+#### `frameworks`
+
+**Language recognized:** React, Angular, Vue, Node and Express with or without '.js'/'JS', plus Django, Flask, FastAPI, Spring Boot and .NET.
+
+```regex
+(?<![\w+#&.])(react([\s.\-]?js)?|angular([\s.\-]?js)?|vue([\s.\-]?js)?|node([\s.\-]?js)?|express[\s.\-]?js|django|flask|fast[\s\-]?api|spring[\s\-]?boot|asp\.net(\s?core)?|\.net(\s?core)?|dotnet)(?![\w+#&]|\.\w)
+```
+_(case-insensitive)_
+
+```regex
+(?<![\w+#&.])(Express)(?![\w+#&]|\.\w)
+```
+_(case-sensitive)_
+
+#### `libraries`
+
+**Language recognized:** Python data, machine learning and plotting libraries, allowing a space or hyphen inside compound names (Tensor Flow, Scikit-learn, Py Torch).
+
+```regex
+(?<![\w+#&.])(pandas|num[\s\-]?py|scikit[\s\-]?learn|sk[\s\-]?learn|tensor[\s\-]?flow|py[\s\-]?torch|keras|matplotlib|seaborn|plotly)(?![\w+#&]|\.\w)
+```
+_(case-insensitive)_
+
+#### `databases`
+
+**Language recognized:** PostgreSQL/Postgres, MySQL, MongoDB/Mongo, SQLite, Redis and the SQL language.
+
+```regex
+(?<![\w+#&.])(postgres|postgre\s?sql|my\s?sql|mongo(\s?db)?|sqlite|redis|sql)(?![\w+#&]|\.\w)
+```
+_(case-insensitive)_
+
+#### `tools`
+
+**Language recognized:** Git, GitHub, GitLab, Docker, Kubernetes/k8s, Tableau and Power BI.
+
+```regex
+(?<![\w+#&.])(git|github|gitlab|docker|kubernetes|k8s|tableau|power[\s\-]?bi)(?![\w+#&]|\.\w)
+```
+_(case-insensitive)_
+
+#### `other_qualifications`
+
+**Language recognized:** REST, RESTful, REST APIs, GraphQL, statistics and statistical analysis. REST alone only in upper case.
+
+```regex
+(?<![\w+#&.])(rest(ful)?[\s\-]?apis?|restful|graph\s?ql|statistics|statistical(\s+(analysis|modeling|modelling))?)(?![\w+#&]|\.\w)
+```
+_(case-insensitive)_
+
+```regex
+(?<![\w+#&.])(REST)(?![\w+#&]|\.\w)
+```
+_(case-sensitive)_
+
+#### `education`
+
+**Language recognized:** A degree (BS, BSc, MSc, PhD, Bachelor's, Master's...) followed by 'in' or 'of', a field that starts with a capital letter and optionally ', Institution' or 'at Institution'.
+
+```regex
+(?<!\w)(?P<degree>Ph\.?\s?D\.?|M\.?\s?Sc\.?|B\.?\s?Sc\.?|M\.?S\.?|B\.?S\.?|B\.?A\.?|M\.?A\.?|Doctorate|(Bachelor|Master)('s)?(\s+of\s+(Science|Arts|Engineering))?)(\s+degree)?\s+(in|of)\s+(?P<field>[A-Z][A-Za-z&/ ]*?[A-Za-z])((\s*[,\-]\s*|\s+(at|from)\s+)(?P<institution>[A-Z][\w&.' ]*?\w))?\s*(?=[.;\n]|$)
+```
+
+#### `experience`
+
+**Language recognized:** A number of years, 'years of experience' and an optional description until the end of the sentence.
+
+```regex
+(?<!\w)(?P<years>\d{1,2})\+?\s*(years?|yrs?)\s+of\s+(professional\s+)?experience(\s+(?P<description>[^.\n]+))?
+```
+
+#### `skills_section`
+
+**Language recognized:** A line that starts with 'Skills:' or 'Technical Skills:'. Its items are split by commas, semicolons or bars.
+
+```regex
+^\s*(technical\s+)?skills\s*:\s*(?P<items>.+)$
+```
+
 
 ## 2. FST formalization
 
