@@ -1,7 +1,11 @@
 Wednesday Addams
-Email: wednesday@example.com
-Phone: +573001234567
-Portfolio: https://portfolio.example.com
-Technical Skills: JS, React.js, NodeJS, Postgres, Git.
-Education: BS in Computer Science.
-Experience: 3 years of experience in full-stack development.
+Email: wednesday@nevermore.edu
+Phone: +57 300 123 4567
+Portfolio: https://wednesday.dev
+
+3 years of experience developing web applications.
+
+Technical Skills:
+JS, React.js, NodeJS, Postgres, Git.
+
+Education: BS in Computer Science, Nevermore Academy.

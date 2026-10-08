@@ -1,0 +1,10 @@
+Alex Rivera
+Email: alex.rivera@example.com
+Phone: (602) 555-0187
+GitHub: github.com/arivera
+
+5 years of experience building backend services and RESTful APIs for payment platforms.
+
+Technical Skills: Java, Spring Boot, MySQL, Redis, REST APIs, Docker, Kubernetes, GitHub.
+
+Education: BSc in Software Engineering at Universidad Icesi.
