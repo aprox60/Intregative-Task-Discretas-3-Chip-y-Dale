@@ -1,13 +1,15 @@
 {
   "name": "FULL_STACK_DEVELOPER",
-  "required_tokens": ["JAVASCRIPT", "REACT", "NODE_JS", "POSTGRESQL", "GIT"],
-  "sequence": [
-    ["JAVASCRIPT", "TYPESCRIPT"],
-    ["REACT", "ANGULAR", "VUE"],
-    ["NODE_JS", "DJANGO", "SPRING_BOOT"],
-    ["SQL", "POSTGRESQL", "MONGODB"],
-    ["REST"],
-    ["GIT"]
-  ],
-  "description": "Full stack developer profile with frontend, backend, storage, and Git evidence."
+  "display_name": "Full Stack Developer",
+  "area": "software",
+  "automaton_type": "ENFA",
+  "description": "Works on client-side and server-side components: user interfaces, backend services, APIs, database access and version control.",
+  "groups": [
+    {"name": "FRONTEND_LANGUAGE", "tokens": ["JAVASCRIPT", "TYPESCRIPT"], "required": true},
+    {"name": "FRONTEND_FRAMEWORK", "tokens": ["REACT", "ANGULAR", "VUE"], "required": true},
+    {"name": "BACKEND", "tokens": ["NODE_JS", "EXPRESS", "DJANGO", "FLASK", "SPRING_BOOT"], "required": true},
+    {"name": "DATABASE", "tokens": ["SQL", "POSTGRESQL", "MYSQL", "MONGODB", "SQLITE"], "required": true},
+    {"name": "API", "tokens": ["REST_API", "GRAPHQL"], "required": false},
+    {"name": "VERSION_CONTROL", "tokens": ["GIT"], "required": true}
+  ]
 }

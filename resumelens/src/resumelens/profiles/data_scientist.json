@@ -1,0 +1,15 @@
+{
+  "name": "DATA_SCIENTIST",
+  "display_name": "Data Scientist",
+  "area": "ai_data",
+  "automaton_type": "ENFA",
+  "description": "Analyzes data with statistical methods and communicates findings through visualizations. Machine-learning libraries are welcome but not mandatory.",
+  "groups": [
+    {"name": "LANGUAGE", "tokens": ["PYTHON", "R"], "required": true},
+    {"name": "DATA_LIBRARY", "tokens": ["PANDAS", "NUMPY"], "required": true},
+    {"name": "STATISTICS", "tokens": ["STATISTICS"], "required": true},
+    {"name": "VISUALIZATION", "tokens": ["MATPLOTLIB", "SEABORN", "PLOTLY", "TABLEAU", "POWER_BI"], "required": true},
+    {"name": "ML_LIBRARY", "tokens": ["SCIKIT_LEARN"], "required": false},
+    {"name": "DATABASE", "tokens": ["SQL", "POSTGRESQL", "MYSQL"], "required": true}
+  ]
+}
