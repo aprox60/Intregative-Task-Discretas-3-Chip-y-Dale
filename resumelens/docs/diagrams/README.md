@@ -9,3 +9,4 @@ python -m resumelens.docs_export
 ```
 
 - `transducers/`: the preprocessing transducer and one transducer per technical category (stage 2).
+- `automata/`: the automaton of each professional profile (stage 3).
