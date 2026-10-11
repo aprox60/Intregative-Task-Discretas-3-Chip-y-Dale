@@ -371,42 +371,127 @@ Run on `PYTHON PANDAS TENSORFLOW POSTGRESQL` in the ML DFA: it ends in $q_4 \not
 - **Patterns in JSON, construction in code.** Adding or changing a profile does not need new code, only a JSON file with its groups and type.
 - **Explaining rejections.** `missing_groups` lists the required groups with no token. It is used by the UI; it does not affect the decision, which is made only by the automaton.
 
-## 4. Candidate profile language (CFG, textX)
+## 4. Candidate profile language (stage 4: context-free grammar with textX)
 
-The DSL organizes a résumé candidate into candidate metadata, repeated experience blocks, repeated education blocks, repeated normalized skills, and the profile classification outcome.
+Implementation: `src/resumelens/dsl/resume.tx` (the grammar), `parser.py` (parsing and validation), `generator.py` (writing the DSL from stages 1–3) and `visualizer.py` (HTML).
 
-### EBNF skeleton
+The first three stages produce loose pieces of information. This stage defines a **domain-specific language** with one fixed structure for a candidate profile. The pipeline writes every candidate in this language, and textX validates it against the grammar. Only a document that passes validation is turned into HTML.
+
+### 4.1 Grammar in EBNF
+
+$G = (V, T, P, S)$ with start symbol $S$ = `CandidateProfile`.
 
 ```ebnf
-resume          = {personal_info, contact_info, experience_block, education_block, skill_block, profile_result};
-personal_info   = 'candidate', ':', IDENT, ',', 'name', ':', STRING ;
-contact_info    = 'email', ':', EMAIL, ',', 'phone', ':', PHONE ;
-experience_block = 'experience', ':', '{', experience_entry, { ',', experience_entry }, '}' ;
-experience_entry = 'role', ':', STRING, ',', 'years', ':', NUMBER ;
-education_block = 'education', ':', '{', education_entry, { ',', education_entry }, '}' ;
-education_entry = 'degree', ':', STRING, ',', 'institution', ':', STRING ;
-skill_block     = 'skills', ':', '[', skill, { ',', skill }, ']' ;
-skill           = IDENT ;
-profile_result  = 'profile', ':', IDENT, ',', 'status', ':', ('ACCEPTED' | 'REJECTED') ;
+CandidateProfile = "candidate", STRING, "{",
+                       Contact,
+                       { Experience },
+                       { Education },
+                       Skills,
+                       Evaluation,
+                   "}" ;
 
-IDENT           = /[A-Za-z_][A-Za-z0-9_\-]*/ ;
-STRING          = /"[^"]*"/ | /'[^"]*'/ ;
-EMAIL           = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/ ;
-PHONE           = /\+?[0-9()\-\s]{7,}/ ;
-NUMBER          = /[0-9]+/ ;
+Contact          = "contact", "{",
+                       "email", ":", EMAIL,
+                       [ "phone", ":", PHONE ],
+                       { Link },
+                   "}" ;
+Link             = "link", ":", URL ;
+
+Experience       = "experience", "{",
+                       "years", ":", INT,
+                       [ "description", ":", STRING ],
+                   "}" ;
+
+Education        = "education", "{",
+                       "degree", ":", STRING,
+                       "field", ":", STRING,
+                       [ "institution", ":", STRING ],
+                   "}" ;
+
+Skills           = "skills", "{", [ TOKEN, { ",", TOKEN } ], "}" ;
+
+Evaluation       = "evaluation", "{", ProfileResult, { ProfileResult }, "}" ;
+ProfileResult    = "profile", ProfileName, ":", Status ;
+ProfileName      = "FULL_STACK_DEVELOPER" | "MACHINE_LEARNING_ENGINEER"
+                 | "BACKEND_DEVELOPER" | "DATA_SCIENTIST" ;
+Status           = "ACCEPTED" | "REJECTED" ;
+
+(* terminals defined by regular expressions *)
+TOKEN  = /[A-Z][A-Z0-9_]*/ ;
+EMAIL  = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/ ;
+PHONE  = /\+?\(?[0-9][0-9 ()\-]{5,}[0-9]/ ;
+URL    = /((https?:\/\/|www\.)|(linkedin|github)\.com\/)[^\s{}]+/ ;
+INT    = /[0-9]+/ ;                      (* built into textX *)
+STRING = /"([^"\\]|\\.)*"/ ;             (* built into textX *)
+COMMENT = /\/\/.*$/ ;                    (* ignored *)
 ```
 
-### Structural characteristics
+### 4.2 Terminals and non-terminals
 
-- Personal and contact data are explicit.
-- Experience and education are repeated blocks rather than single values.
-- Skills are normalized and represented as canonical tokens.
-- Classification results are stored as explicit accepted/rejected profile checks.
-- The grammar is intentionally small and academically tractable for the assignment.
+| | Symbols |
+|---|---|
+| **Non-terminals** $V$ | `CandidateProfile`, `Contact`, `Link`, `Experience`, `Education`, `Skills`, `Evaluation`, `ProfileResult`, `ProfileName`, `Status` |
+| **Terminals** $T$: keywords | `candidate`, `contact`, `email`, `phone`, `link`, `experience`, `years`, `description`, `education`, `degree`, `field`, `institution`, `skills`, `evaluation`, `profile`, `ACCEPTED`, `REJECTED`, the four profile names |
+| **Terminals** $T$: punctuation | `{`, `}`, `:`, `,` |
+| **Terminals** $T$: regular expressions | `TOKEN`, `EMAIL`, `PHONE`, `URL`, `INT`, `STRING` |
 
-## 5. TODOs for the final formalization document
+### 4.3 Structural characteristics
 
-- Fill in the exact formal tuples for each implemented profile.
-- Add diagrams for the transducer and automata states.
-- Add precise lexical rules if the team expands the DSL.
-- Confirm the final set of profile keywords for PROFILE_3_TODO and PROFILE_4_TODO.
+- **Context-free and nested.** Blocks are delimited by `{ … }` and nested two levels deep (`candidate { contact { … } }`). Balanced brackets are a classic context-free structure; no regular expression can check them for arbitrary nesting.
+- **Fixed order of sections.** Contact → experience → education → skills → evaluation. A document with the sections in another order is rejected, which gives every profile the same shape.
+- **Repetition.** `{ Experience }`, `{ Education }`, `{ Link }` (zero or more), `TOKEN { "," TOKEN }` (a comma-separated list) and `ProfileResult { ProfileResult }` (one or more).
+- **Optional elements.** Phone, description and institution, written `[ … ]`.
+- **Closed vocabulary for the result.** A profile name and a status can only be one of the listed keywords, so a document cannot claim an unknown profile or a status like `MAYBE`.
+- **Skills are canonical tokens.** `TOKEN` only accepts the upper-case form produced by the transducers, so raw text like `React.js` cannot appear in a valid profile.
+- **The grammar is unambiguous.** Every block starts with a different keyword, so one token of lookahead is enough to know which rule applies. textX parses with Arpeggio, a PEG (parsing expression grammar) parser whose alternatives are *ordered*. Because no two alternatives of our grammar can start with the same keyword, the ordered choice never has to pick between two matches, and the PEG accepts exactly the language of the CFG written in 4.1.
+
+### 4.4 Validation: what is rejected and why
+
+| Kind | Detected by | Examples (all in `tests/test_dsl.py`) |
+|---|---|---|
+| **Lexical** | a value does not match its regex terminal | `email: wednesday-nevermore` · `skills { javascript }` · `years: three` |
+| **Syntactic** | the structure does not match the rules | missing `email` · `skills [ … ]` · status `MAYBE` · unknown profile · empty `evaluation` · sections out of order |
+| **Semantic** | textX *object processors* registered in `parser.py` | empty candidate name · repeated skill · more than 60 years of experience · the same profile evaluated twice |
+
+Every error is turned into `ResumeValidationError(kind, message, line, column)`. For example, the résumé `invalid_edge_case.txt` has no email, and its generated document is rejected with `Syntax error: Expected 'email' (line 4, column 5)`, so no HTML is produced for it.
+
+### 4.5 Example of a valid document
+
+Generated by the pipeline for `nina_patel_data_scientist.txt`:
+
+```text
+// Generated by ResumeLens
+candidate "Nina Patel" {
+    contact {
+        email: nina.patel@example.com
+        phone: +44 20 7946 0958
+    }
+    experience {
+        years: 4
+        description: "statistical analysis and data visualization for retail companies"
+    }
+    education {
+        degree: "Master's"
+        field: "Applied Statistics"
+        institution: "University of Leeds"
+    }
+    skills { R, PYTHON, PANDAS, NUMPY, MATPLOTLIB, SEABORN, POSTGRESQL, POWER_BI, STATISTICS }
+    evaluation {
+        profile FULL_STACK_DEVELOPER: REJECTED
+        profile MACHINE_LEARNING_ENGINEER: REJECTED
+        profile BACKEND_DEVELOPER: REJECTED
+        profile DATA_SCIENTIST: ACCEPTED
+    }
+}
+```
+
+### 4.6 Visualization
+
+`render_html(model)` reads the **validated textX model**, not the raw résumé, so the page only shows information that passed the grammar. It shows the name and contact information, the result for each profile, the normalized skills, the experience and the education. Every value is escaped with `html.escape`, so text from a résumé cannot inject HTML.
+
+### 4.7 Design decisions
+
+- **Keywords at the start of each block** keep the language readable and make the grammar easy to parse without lookahead problems.
+- **Terminals reuse the regex ideas from stage 1** (email, phone, URL), but they are stricter, because here they validate a value instead of searching inside free text.
+- **Syntax in the grammar, consistency in object processors.** Rules such as "a skill can't be repeated" would make the CFG much bigger, so they are checked after parsing.
+- **The DSL is written by the program but can be edited by hand.** That is why it validates its input instead of trusting the generator; the tests feed it hand-written invalid documents.
