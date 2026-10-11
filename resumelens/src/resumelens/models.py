@@ -107,29 +107,23 @@ class ExtractionResult:
         return json.dumps(self.to_dict(), indent=2, ensure_ascii=False)
 
 
-class Candidate:
-    # Candidate information used by the rest of the pipeline
-
-    def __init__(self, full_name="", email="", phone="", links=None, skills=None,
-                 academic_qualifications=None, experience=None, profile_results=None):
-        self.full_name = full_name
-        self.email = email
-        self.phone = phone
-        self.links = links if links is not None else []
-        self.skills = skills if skills is not None else []
-        self.academic_qualifications = academic_qualifications if academic_qualifications is not None else []
-        self.experience = experience if experience is not None else []
-        self.profile_results = profile_results if profile_results is not None else {}
-
-
 class PipelineResult:
     # Everything the pipeline produces for one resume
 
-    def __init__(self, candidate, extracted, normalized_tokens, classification, dsl_text="", html="", notes=None):
-        self.candidate = candidate
-        self.extracted = extracted
-        self.normalized_tokens = normalized_tokens
-        self.classification = classification
-        self.dsl_text = dsl_text
-        self.html = html
-        self.notes = notes if notes is not None else []
+    def __init__(self):
+        self.extraction = None
+        self.normalization = None
+        self.sorted_by_profile = {}
+        self.classification = {}
+        self.dsl_text = ""
+        self.model = None
+        self.html = ""
+        # ResumeValidationError when the generated DSL is rejected by the grammar
+        self.error = None
+
+    def get_accepted_profiles(self):
+        accepted = []
+        for profile_name in self.classification:
+            if self.classification[profile_name]:
+                accepted.append(profile_name)
+        return accepted
