@@ -1,0 +1,10 @@
+Kim Possible
+Email: kim.possible@middleton.edu
+Phone: +1 555 010 2030
+GitHub: github.com/kimpossible
+
+6 years of experience building web platforms end to end.
+
+Technical Skills: TypeScript, Angular, Express.js, MongoDB, GraphQL, Docker, Git.
+
+Education: BSc in Computer Engineering at Middleton University.

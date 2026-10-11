@@ -285,41 +285,91 @@ Before classification, the normalized tokens are put in the order defined by eac
 
 Example from the assignment (Full Stack): `Git, NodeJS, JS, Postgres, React.js` → normalization → `GIT, NODE_JS, JAVASCRIPT, POSTGRESQL, REACT` → sorting → `JAVASCRIPT, REACT, NODE_JS, POSTGRESQL, GIT`.
 
-## 3. Automata formalization
+## 3. Finite automata (stage 3: qualification pattern recognition)
 
-The profile classification stage uses finite automata over the sorted normalized token stream.
+Implementation: `src/resumelens/profiles/*.json` (the patterns), `classification/profiles.py` (loading them), `classification/automata.py` (the pyformlang automata) and `classification/classifier.py`.
 
-### Reference ML automaton
+### 3.1 Profile patterns
 
-The canonical accepted pattern for the ML profile is:
+A profile is an ordered list of **qualification groups**. A candidate satisfies the profile when the sorted sequence from stage 2 has **at least one token of every required group, in the order of the groups**. The tokens of a profile are its alphabet $\Sigma$. With groups $G_0, \dots, G_{n-1}$ the pattern is the regular language
 
-`q0 -PYTHON-> q1 -{PANDAS,NUMPY}-> q2 -{SCIKIT_LEARN,TENSORFLOW,PYTORCH}-> q3 -{SQL,POSTGRESQL}-> q4 -GIT-> q5`
+$$L = G_0^{+}\, G_1^{+} \cdots G_{n-1}^{+}$$
 
-with `q5` accepting.
+where an optional group contributes $G_i^{*}$ instead of $G_i^{+}$.
 
-### 5-tuple for automata
+| Profile | Type | Pattern (canonical order) |
+|---|---|---|
+| Full Stack Developer | ε-NFA | {JAVASCRIPT, TYPESCRIPT}⁺ {REACT, ANGULAR, VUE}⁺ {NODE_JS, EXPRESS, DJANGO, FLASK, SPRING_BOOT}⁺ {SQL, POSTGRESQL, MYSQL, MONGODB, SQLITE}⁺ **{REST_API, GRAPHQL}\*** {GIT}⁺ |
+| Machine Learning Engineer | DFA | {PYTHON}⁺ {PANDAS, NUMPY}⁺ {SCIKIT_LEARN, TENSORFLOW, PYTORCH, KERAS}⁺ {SQL, POSTGRESQL, MYSQL}⁺ {GIT}⁺ |
+| Backend Developer *(ours, software)* | NFA | {JAVA, PYTHON, GO, CSHARP, KOTLIN, JAVASCRIPT, TYPESCRIPT}⁺ {SPRING_BOOT, DJANGO, FLASK, FASTAPI, NODE_JS, EXPRESS, DOTNET}⁺ {SQL, POSTGRESQL, MYSQL, MONGODB, REDIS}⁺ {REST_API, GRAPHQL}⁺ {DOCKER, KUBERNETES}⁺ {GIT}⁺ |
+| Data Scientist *(ours, AI/data)* | ε-NFA | {PYTHON, R}⁺ {PANDAS, NUMPY}⁺ {STATISTICS}⁺ {MATPLOTLIB, SEABORN, PLOTLY, TABLEAU, POWER_BI}⁺ **{SCIKIT_LEARN}\*** {SQL, POSTGRESQL, MYSQL}⁺ |
 
-For a profile automaton A = (Q, Σ, δ, q0, F):
+**Why these two profiles.** *Backend Developer* is the server half of Full Stack, without frontend evidence but with two things a backend role needs and a full-stack one does not: an API style and containers. *Data Scientist* is the analysis side of AI/data. It needs statistics and visualization, which separates it from the ML Engineer, who needs an ML framework and Git. The two pairs overlap on purpose (`PYTHON`, `SQL`, `NODE_JS`...), so one résumé can satisfy more than one profile (see `kim_possible_multi_profile.txt`, accepted as Full Stack and Backend).
 
-| Symbol | Meaning | Example |
-| --- | --- | --- |
-| Q | Finite set of states | `{q0, q1, q2, q3, q4, q5}` |
-| Σ | Input alphabet | `{PYTHON, PANDAS, NUMPY, SCIKIT_LEARN, TENSORFLOW, PYTORCH, SQL, POSTGRESQL, GIT}` |
-| δ | Transition function | State transitions on accepted tokens |
-| q0 | Start state | `q0` |
-| F | Accepting states | `{q5}` |
+### 3.2 General construction
 
-### Type justification
+All four automata come from the same function (`ProfileAutomaton.build`), so the four profiles go through the same software, as the assignment asks. With $n$ groups:
 
-The ML-like pattern is naturally expressed as an NFA because it contains transitions on sets of possible tokens (`{PANDAS, NUMPY}` and `{SCIKIT_LEARN, TENSORFLOW, PYTORCH}`), which is easier to specify than a DFA with a fully enumerated transition table. The implementation may still be determinized internally by `pyformlang` if required.
+- $Q = \{q_0, q_1, \dots, q_n\}$. Being in $q_i$ means "groups $G_0 \dots G_{i-1}$ are already satisfied".
+- $\Sigma = G_0 \cup \dots \cup G_{n-1}$. The groups are disjoint; `load_profile` checks this.
+- Initial state $q_0$, final states $F = \{q_n\}$.
+- $\delta$ depends on the type:
 
-### Full Stack automaton
+| Type | Transitions for each $t \in G_i$ | Optional group |
+|---|---|---|
+| **DFA** | $\delta(q_i, t) = q_{i+1}$ and $\delta(q_{i+1}, t) = q_{i+1}$ | not allowed |
+| **NFA** | $\delta(q_i, t) = \{q_i, q_{i+1}\}$ | not allowed |
+| **ε-NFA** | $\delta(q_i, t) = \{q_{i+1}\}$, $\delta(q_{i+1}, t) = \{q_{i+1}\}$ | $\delta(q_i, \varepsilon) = \{q_{i+1}\}$ |
 
-The Full Stack profile can be modeled analogously, for example:
+### 3.3 Type of each automaton, and why
 
-`q0 -{JS,TS}-> q1 -{REACT,ANGULAR,VUE}-> q2 -{NODE_JS,DJANGO,SPRING_BOOT}-> q3 -{SQL,POSTGRESQL,MONGODB}-> q4 -REST-> q5 -GIT-> q6`
+- **Machine Learning Engineer: DFA.** $\delta$ is a function $Q \times \Sigma \to Q$: for every state and symbol there is at most one next state, and there are no ε-transitions. The groups are disjoint, so in $q_{i+1}$ the loop symbols ($G_i$) and the forward symbols ($G_{i+1}$) never clash. pyformlang confirms it with `is_deterministic() == True`. Missing pairs go to an implicit dead state.
+- **Backend Developer: NFA.** $\delta : Q \times \Sigma \to \mathcal{P}(Q)$ and, for example, $\delta(q_0, \mathrm{JAVA}) = \{q_0, q_1\}$. After reading a language the automaton does not know whether more languages will follow (stay in $q_0$) or whether the next token is a framework (go to $q_1$), so it follows both paths. It recognizes $G_i^{*} G_i = G_i^{+}$. There are no ε-transitions, so it is an NFA and not an ε-NFA. `tests/test_classification.py` checks with `is_equivalent_to` that this construction and the DFA construction accept the same language.
+- **Full Stack Developer and Data Scientist: ε-NFA.** They have an optional group (API for Full Stack, ML library for Data Scientist). The cleanest way to say "this group may be absent" is an ε-transition $\delta(q_i, \varepsilon) = \{q_{i+1}\}$ that skips it without reading a token. Since $\delta$ is defined on $Q \times (\Sigma \cup \{\varepsilon\})$, they are ε-NFAs.
 
-with `q6` accepting.
+All four are equivalent to some DFA (subset construction). We kept the three types to show when each one is the natural model.
+
+### 3.4 Formal definitions and diagrams
+
+Complete 5-tuples, transition tables and Mermaid diagrams, generated from the pyformlang objects:
+[full_stack_developer](diagrams/automata/full_stack_developer.md) ·
+[machine_learning_engineer](diagrams/automata/machine_learning_engineer.md) ·
+[backend_developer](diagrams/automata/backend_developer.md) ·
+[data_scientist](diagrams/automata/data_scientist.md).
+
+#### Example: Full Stack Developer (ε-NFA)
+
+```mermaid
+flowchart LR
+    start(( )) --> q0
+    q6(((q6)))
+    q0 -- "JAVASCRIPT, TYPESCRIPT" --> q1
+    q1 -- "JAVASCRIPT, TYPESCRIPT" --> q1
+    q1 -- "REACT, ANGULAR, VUE" --> q2
+    q2 -- "REACT, ANGULAR, VUE" --> q2
+    q2 -- "NODE_JS, EXPRESS, DJANGO, FLASK, SPRING_BOOT" --> q3
+    q3 -- "NODE_JS, EXPRESS, DJANGO, FLASK, SPRING_BOOT" --> q3
+    q3 -- "SQL, POSTGRESQL, MYSQL, MONGODB, SQLITE" --> q4
+    q4 -- "SQL, POSTGRESQL, MYSQL, MONGODB, SQLITE" --> q4
+    q4 -- "REST_API, GRAPHQL" --> q5
+    q5 -- "REST_API, GRAPHQL" --> q5
+    q4 -- "ε" --> q5
+    q5 -- "GIT" --> q6
+    q6 -- "GIT" --> q6
+```
+
+Run on the sequence from the assignment, `JAVASCRIPT REACT NODE_JS POSTGRESQL GIT`:
+$q_0 \xrightarrow{JAVASCRIPT} q_1 \xrightarrow{REACT} q_2 \xrightarrow{NODE\_JS} q_3 \xrightarrow{POSTGRESQL} q_4 \xrightarrow{\varepsilon} q_5 \xrightarrow{GIT} q_6 \in F$ → **ACCEPTED**.
+
+Run on `PYTHON PANDAS TENSORFLOW POSTGRESQL` in the ML DFA: it ends in $q_4 \notin F$ (the GIT group is missing) → **REJECTED**. `missing_groups` reports `VERSION_CONTROL`.
+
+### 3.5 Design decisions
+
+- **Alphabet = canonical tokens, not characters.** Stage 2 already turned the text into symbols, so the automata work at the level of qualifications, which keeps them small (6 or 7 states).
+- **Sorting makes the pattern regular and small.** Without the canonical order, "has a language, a framework, a database..." in any order would need a state for every subset of satisfied groups ($2^n$ states). Sorting first reduces it to a chain of $n+1$ states.
+- **Several tokens per group.** The loops accept `PANDAS NUMPY` or `SCIKIT_LEARN TENSORFLOW PYTORCH`. The skeleton version accepted exactly one token per group and wrongly rejected Mary Jane Watson.
+- **Patterns in JSON, construction in code.** Adding or changing a profile does not need new code, only a JSON file with its groups and type.
+- **Explaining rejections.** `missing_groups` lists the required groups with no token. It is used by the UI; it does not affect the decision, which is made only by the automaton.
 
 ## 4. Candidate profile language (CFG, textX)
 
