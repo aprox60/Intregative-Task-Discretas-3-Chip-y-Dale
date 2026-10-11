@@ -163,46 +163,127 @@ _(case-sensitive)_
 ```
 
 
-## 2. FST formalization
+## 2. Finite-state transducers (stage 2: normalization)
 
-The normalization stage uses a finite-state transducer (FST) to map lexically different skill names to a canonical token. The transducer is built from a lexicon; each entry maps a set of variants to the canonical symbol used by the automata.
+Implementation: `src/resumelens/normalization/variants.py` (the transformations), `transducers.py` (the pyformlang FSTs), `normalizer.py` (applying them) and `sorter.py` (canonical order).
 
-### Canonical variant map
+The same qualification can be written in many ways (`JS`, `Javascript`, `JavaScript`). Normalization uses finite-state transducers to map every variant to one canonical token. Each transducer is a 7-tuple
 
-- `JS`, `Javascript`, `JavaScript` -> `JAVASCRIPT`
-- `React.js`, `ReactJS`, `React JS` -> `REACT`
-- `NodeJS`, `Node.js`, `Node JS` -> `NODE_JS`
-- `Postgres`, `PostgreSQL` -> `POSTGRESQL`
-- `pandas` -> `PANDAS`
-- `sklearn`, `scikit learn`, `Scikit-learn` -> `SCIKIT_LEARN`
-- `Tensor Flow`, `TensorFlow` -> `TENSORFLOW`
-- `Py Torch`, `PyTorch` -> `PYTORCH`
+$$M = (Q, \Sigma, \Gamma, \delta, \omega, q_0, F)$$
 
-### FST template
+where $\delta : Q \times \Sigma \to Q$ is the transition function and $\omega : Q \times \Sigma \to \Gamma^*$ is the output function. A string $w$ is translated if, reading it from $q_0$, the transducer ends in a state of $F$. The translation is the concatenation of the outputs of the transitions it took. When a pair $(q, a)$ is not defined, the string is rejected.
 
-The transducer is documented as a 7-tuple: M = (Q, Σ, Γ, δ, ω, q0, F)
+Each string goes through **two transducers in sequence** (composition):
 
-| Symbol | Meaning | Example in this project |
-| --- | --- | --- |
-| Q | Finite set of states | `{q0, q1, q2, q3, ...}` |
-| Σ | Input alphabet | Lowercase/uppercase letters, dot, whitespace, hyphen, slash |
-| Γ | Output alphabet | Canonical upper-case symbols such as `JAVASCRIPT`, `REACT`, `NODE_JS` |
-| δ | Transition function | Maps character sequences to new states and emits canonical output |
-| ω | Output function | Emits canonical token on accepting paths |
-| q0 | Initial state | `q0` |
-| F | Accepted states | Final states corresponding to valid normalized tokens |
+```text
+"Scikit-learn" --M_pre--> "scikitlearn" --(append $)--> "scikitlearn$" --M_libraries--> SCIKIT_LEARN
+```
 
-### Design decision
+### 2.1 Preprocessing transducer $M_{pre}$
 
-A single lexicon-driven transducer is preferred over one transducer per skill because:
-- the canonicalization strategy is easier to maintain;
-- skill variants are defined declaratively in a dictionary;
-- the same normalization logic can be reused for different profiles;
-- the input alphabet and output alphabet remain conceptually unified.
+| Part | Value |
+|---|---|
+| $Q$ | $\{q_0\}$ |
+| $\Sigma$ | $\{A..Z,\ a..z,\ 0..9,\ +,\ \#,\ ␣,\ .,\ -,\ \_,\ /\}$ (71 symbols) |
+| $\Gamma$ | $\{a..z,\ 0..9,\ +,\ \#\}$ |
+| $\delta$ | $\delta(q_0, x) = q_0$ for every $x \in \Sigma$ |
+| $\omega$ | $\omega(q_0, X) = $ lower case of $X$ for $X \in A..Z$; $\omega(q_0, x) = x$ for $x \in a..z,\ 0..9,\ +,\ \#$; $\omega(q_0, s) = \varepsilon$ for $s \in \{␣, ., -, \_, /\}$ |
+| $q_0$ | $q_0$ |
+| $F$ | $\{q_0\}$ |
 
-### Example graphical interpretation
+It is a one-state transducer, so the language it accepts is $\Sigma^*$. Its job is to remove differences in case and separators, so `Tensor Flow`, `TensorFlow` and `tensor-flow` all become `tensorflow`. A character outside $\Sigma$ (like `é`) makes it reject the string. Full table and diagram: [diagrams/transducers/preprocessing.md](diagrams/transducers/preprocessing.md).
 
-The graphical representation is exported to `docs/diagrams/` and can illustrate a sequence of transition states such as `JS -> JAVASCRIPT` or `Node.js -> NODE_JS`.
+### 2.2 Category transducers $M_c$
+
+There is one transducer for each technical category $c$ found in stage 1. They are all built the same way (`build_category_transducer`) from the table of variants $V_c$ in `variants.py`:
+
+| Part | Value |
+|---|---|
+| $Q$ | $\{q_0, q_f\} \cup$ one state for each prefix of a variant in $V_c$ (a **trie**) |
+| $\Sigma$ | the characters used in the variants of $V_c$, plus the end mark `$` |
+| $\Gamma$ | the canonical tokens of category $c$ |
+| $\delta$ | $\delta(p, a) = pa$ when $pa$ is a prefix of a variant; $\delta(w, \$) = q_f$ when $w \in V_c$ |
+| $\omega$ | $\omega(p, a) = \varepsilon$ for every character; $\omega(w, \$) = V_c(w)$, the canonical token of the variant $w$ |
+| $q_0$ | $q_0$ (the empty prefix) |
+| $F$ | $\{q_f\}$ |
+
+Size of each one:
+
+| Transducer | Variants | States | Transitions | Canonical tokens (Γ) |
+|---|---|---|---|---|
+| `programming_languages` | 13 | 51 | 62 | JAVASCRIPT, TYPESCRIPT, PYTHON, JAVA, GO, KOTLIN, CSHARP, R |
+| `frameworks` | 19 | 85 | 102 | REACT, ANGULAR, VUE, NODE_JS, EXPRESS, DJANGO, FLASK, FASTAPI, SPRING_BOOT, DOTNET |
+| `libraries` | 10 | 72 | 80 | PANDAS, NUMPY, SCIKIT_LEARN, TENSORFLOW, PYTORCH, KERAS, MATPLOTLIB, SEABORN, PLOTLY |
+| `databases` | 8 | 34 | 40 | POSTGRESQL, MYSQL, MONGODB, SQLITE, REDIS, SQL |
+| `tools` | 8 | 43 | 49 | GIT, DOCKER, KUBERNETES, TABLEAU, POWER_BI |
+| `other_qualifications` | 12 | 56 | 66 | REST_API, GRAPHQL, STATISTICS |
+
+Complete 7-tuples (every transition with its output) and diagrams:
+[programming_languages](diagrams/transducers/programming_languages.md) ·
+[frameworks](diagrams/transducers/frameworks.md) ·
+[libraries](diagrams/transducers/libraries.md) ·
+[databases](diagrams/transducers/databases.md) ·
+[tools](diagrams/transducers/tools.md) ·
+[other_qualifications](diagrams/transducers/other_qualifications.md).
+They are generated from the pyformlang objects with `python -m resumelens.docs_export`, so the documentation and the code can't disagree.
+
+#### Example: part of $M_{tools}$ (the variants of GIT)
+
+```mermaid
+flowchart LR
+    start(( )) --> q0
+    qf(((qf)))
+    q0 -- "g / ε" --> q1
+    q1 -- "i / ε" --> q2
+    q2 -- "t / ε" --> q3
+    q3 -- "$ / GIT" --> qf
+    q3 -- "h / ε" --> q4
+    q4 -- "u / ε" --> q5
+    q5 -- "b / ε" --> q6
+    q6 -- "$ / GIT" --> qf
+    q3 -- "l / ε" --> q7
+    q7 -- "a / ε" --> q8
+    q8 -- "b / ε" --> q9
+    q9 -- "$ / GIT" --> qf
+```
+
+Run on `github$`: $q_0 \xrightarrow{g/\varepsilon} q_1 \xrightarrow{i/\varepsilon} q_2 \xrightarrow{t/\varepsilon} q_3 \xrightarrow{h/\varepsilon} q_4 \xrightarrow{u/\varepsilon} q_5 \xrightarrow{b/\varepsilon} q_6 \xrightarrow{\$/GIT} q_f$, output `GIT`.
+Run on `gi$`: from $q_2$ there is no transition on `$`, so the string is rejected.
+
+### 2.3 Design decisions
+
+- **Two transducers in sequence instead of one.** Without preprocessing, the trie would need a branch for every combination of case and separator (`React.js`, `ReactJS`, `react js`...). With it, each canonical token needs only a few variants.
+- **One transducer per category.** A single trie for all ~70 variants would have more than 300 states and could not be drawn or explained. Splitting by category keeps each model small, and it reuses the categories from stage 1, so a string is only compared with the variants of its own category. (`React` under `databases` is rejected.)
+- **End mark `$`.** `postgres` is a prefix of `postgresql`. If the output were written while reading the last letter, the transducer could not know whether the word ends there. With the mark, the output is written only when the whole word has been read, and the transducer stays **deterministic** (at most one transition for each $(q, a)$, checked in `tests/test_transducers.py`).
+- **Output only at the end.** Every character transition writes $\varepsilon$, so a rejected string produces no partial output.
+- **Prefix sharing (trie).** Variants with a common beginning share states (`git`, `github`, `gitlab` share $q_0 \dots q_3$).
+- **Unknown strings are kept apart.** A string that a transducer rejects is not invented into a token. It is reported in `NormalizationResult.unknown`.
+- **Duplicates are removed.** `JS` and `JavaScript` produce the same token once.
+
+### 2.4 Our transformations
+
+Besides the examples in the assignment (`JS → JAVASCRIPT`, `React.js → REACT`, `NodeJS → NODE_JS`, `Postgres → POSTGRESQL`, `sklearn → SCIKIT_LEARN`, `Tensor Flow → TENSORFLOW`, `Py Torch → PYTORCH`...), we added the ones our two profiles need:
+
+| Variants | Canonical token |
+|---|---|
+| `C#`, `c sharp`, `csharp` | CSHARP |
+| `Go`, `Golang` | GO |
+| `TS`, `TypeScript` | TYPESCRIPT |
+| `.NET`, `.NET Core`, `ASP.NET`, `dotnet` | DOTNET |
+| `Spring Boot`, `SpringBoot`, `spring-boot` | SPRING_BOOT |
+| `Express`, `Express.js` | EXPRESS |
+| `Mongo`, `MongoDB` | MONGODB |
+| `Git`, `GitHub`, `GitLab` | GIT |
+| `Kubernetes`, `k8s` | KUBERNETES |
+| `Power BI`, `PowerBI` | POWER_BI |
+| `REST`, `RESTful`, `REST API(s)`, `RESTful API(s)` | REST_API |
+| `Statistics`, `statistical analysis`, `statistical modeling` | STATISTICS |
+
+### 2.5 Canonical order (sorting)
+
+Before classification, the normalized tokens are put in the order defined by each profile (`sorter.py`). The order is the order of the profile groups, and inside a group the order of the JSON file. Tokens that are not in the profile's alphabet are left out, so each automaton only reads symbols of its own $\Sigma$, and the result does not depend on the order in which the candidate wrote the skills.
+
+Example from the assignment (Full Stack): `Git, NodeJS, JS, Postgres, React.js` → normalization → `GIT, NODE_JS, JAVASCRIPT, POSTGRESQL, REACT` → sorting → `JAVASCRIPT, REACT, NODE_JS, POSTGRESQL, GIT`.
 
 ## 3. Automata formalization
 
