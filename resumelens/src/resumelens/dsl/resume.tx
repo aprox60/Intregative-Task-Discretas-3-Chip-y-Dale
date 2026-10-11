@@ -1,59 +1,87 @@
-ResumeModel:
-    candidate = Candidate
-    contact = ContactInfo
-    experiences += ExperienceEntry[1..*]
-    educations += EducationEntry[1..*]
-    skills += SkillEntry[1..*]
-    classification = ClassificationResult
+/*
+  ResumeLens candidate profile language (stage 4).
+
+  A document describes one candidate: contact information, experience, education,
+  normalized skills and the result of the profile classification.
+  Non-terminals start with an upper case letter. Terminals are the keywords in quotes
+  and the regular expressions at the end of the file.
+*/
+
+CandidateProfile:
+    'candidate' name=STRING '{'
+        contact=Contact
+        experiences*=Experience
+        educations*=Education
+        skills=Skills
+        evaluation=Evaluation
+    '}'
 ;
 
-Candidate:
-    'candidate' name=STRING
+Contact:
+    'contact' '{'
+        'email' ':' email=Email
+        ('phone' ':' phone=Phone)?
+        links*=Link
+    '}'
 ;
 
-ContactInfo:
-    'email' email=EMAIL
-    'phone' phone=PHONE
-    ('links' links+=URL[1..*])?
+Link:
+    'link' ':' url=Url
 ;
 
-ExperienceEntry:
-    'experience' role=STRING 'years' years=NUMBER
+Experience:
+    'experience' '{'
+        'years' ':' years=INT
+        ('description' ':' description=STRING)?
+    '}'
 ;
 
-EducationEntry:
-    'education' degree=STRING 'institution' institution=STRING
+Education:
+    'education' '{'
+        'degree' ':' degree=STRING
+        'field' ':' field=STRING
+        ('institution' ':' institution=STRING)?
+    '}'
 ;
 
-SkillEntry:
-    'skill' value=ID
+Skills:
+    'skills' '{' tokens*=Token[','] '}'
 ;
 
-ClassificationResult:
-    'profile' profile_name=ID
-    'status' status=('ACCEPTED' | 'REJECTED')
+Evaluation:
+    'evaluation' '{' results+=ProfileResult '}'
 ;
 
-EMAIL:
-    /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/
+ProfileResult:
+    'profile' profile=ProfileName ':' status=Status
 ;
 
-PHONE:
-    /\+?[0-9()\-\s]{7,}/
+ProfileName:
+    'FULL_STACK_DEVELOPER' | 'MACHINE_LEARNING_ENGINEER' | 'BACKEND_DEVELOPER' | 'DATA_SCIENTIST'
 ;
 
-URL:
-    /https?:\/\/\S+|www\.\S+/
+Status:
+    'ACCEPTED' | 'REJECTED'
 ;
 
-NUMBER:
-    /[0-9]+/
+// Terminals defined with regular expressions
+
+Token:
+    /[A-Z][A-Z0-9_]*/
 ;
 
-STRING:
-    /"[^"]*"|\'[^\']*\'/
+Email:
+    /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/
 ;
 
-ID:
-    /[A-Za-z_][A-Za-z0-9_\-]*/
+Phone:
+    /\+?\(?[0-9][0-9 ()\-]{5,}[0-9]/
+;
+
+Url:
+    /((https?:\/\/|www\.)|(linkedin|github)\.com\/)[^\s{}]+/
+;
+
+Comment:
+    /\/\/.*$/
 ;
