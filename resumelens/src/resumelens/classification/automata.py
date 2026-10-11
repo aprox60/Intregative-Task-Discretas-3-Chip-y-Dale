@@ -1,77 +1,109 @@
-from __future__ import annotations
+# Stage 3: finite automata that recognize the qualification pattern of each profile.
+#
+# Each automaton is M = (Q, Sigma, delta, q0, F) built with pyformlang from the profile
+# groups. The input is the sorted sequence of tokens from stage 2, so the automaton only
+# has to check that the groups appear in order and that no required group is missing.
+#
+# With n groups G0, G1, ..., G(n-1) the states are q0, q1, ..., qn and F = {qn}.
+# Being in state qi means "groups G0 ... G(i-1) are already satisfied".
+#
+# The three types of automata are built in a different way:
+# - DFA:  delta(qi, t) = q(i+1) and delta(q(i+1), t) = q(i+1) for t in Gi
+#         (the loop reads more tokens of the same group)
+# - NFA:  delta(qi, t) = {qi, q(i+1)} for t in Gi
+#         (after reading t it can stay or move on, so it has to "guess")
+# - ENFA: like the DFA, plus delta(qi, epsilon) = {q(i+1)} when Gi is optional
+#         (the epsilon transition skips the group)
 
-from dataclasses import dataclass
+from pyformlang.finite_automaton import (
+    DeterministicFiniteAutomaton,
+    Epsilon,
+    EpsilonNFA,
+    NondeterministicFiniteAutomaton,
+    State,
+    Symbol,
+)
 
-try:
-    from pyformlang.finite_automaton import NFA
-except Exception:  # pragma: no cover
-    NFA = None
+EPSILON = "ε"
 
 
-@dataclass
 class ProfileAutomaton:
-    """A lightweight automaton wrapper used to classify normalized tokens."""
 
-    profile_name: str
-    states: list[str]
-    alphabet: set[str]
-    transitions: dict[tuple[str, str], set[str]]
-    start_state: str
-    accepting_states: set[str]
+    def __init__(self, profile):
+        self.profile = profile
+        self.automaton_type = profile.automaton_type
+        self.states = []
+        self.alphabet = profile.get_alphabet()
+        # Each transition is (from_state, symbol, to_state). The symbol is EPSILON for epsilon moves
+        self.transitions = []
+        self.start_state = "q0"
+        self.final_states = []
 
-    def accepts(self, tokens: list[str]) -> bool:
-        """Check whether the token stream is accepted by the automaton."""
+        if self.automaton_type == "DFA":
+            self.automaton = DeterministicFiniteAutomaton()
+        elif self.automaton_type == "NFA":
+            self.automaton = NondeterministicFiniteAutomaton()
+        else:
+            self.automaton = EpsilonNFA()
 
-        if not tokens:
-            return False
-        current = {self.start_state}
+        self.build()
+
+    def add_transition(self, from_state, symbol, to_state):
+        self.transitions.append((from_state, symbol, to_state))
+        if symbol == EPSILON:
+            self.automaton.add_transition(State(from_state), Epsilon(), State(to_state))
+        else:
+            self.automaton.add_transition(State(from_state), Symbol(symbol), State(to_state))
+
+    def build(self):
+        groups = self.profile.groups
+        for number in range(len(groups) + 1):
+            self.states.append("q" + str(number))
+
+        for number in range(len(groups)):
+            group = groups[number]
+            current = "q" + str(number)
+            following = "q" + str(number + 1)
+
+            for token in group.tokens:
+                if self.automaton_type == "NFA":
+                    self.add_transition(current, token, current)
+                    self.add_transition(current, token, following)
+                else:
+                    self.add_transition(current, token, following)
+                    self.add_transition(following, token, following)
+
+            if not group.required:
+                self.add_transition(current, EPSILON, following)
+
+        last_state = self.states[len(self.states) - 1]
+        self.final_states.append(last_state)
+        self.automaton.add_start_state(State(self.start_state))
+        self.automaton.add_final_state(State(last_state))
+
+    def accepts(self, tokens):
+        symbols = []
         for token in tokens:
-            next_states: set[str] = set()
-            for state in current:
-                for symbol in self.transitions.get((state, token), set()):
-                    next_states.add(symbol)
-            current = next_states
-            if not current:
-                return False
-        return bool(current & self.accepting_states)
+            symbols.append(Symbol(token))
+        return self.automaton.accepts(symbols)
+
+    def missing_groups(self, tokens):
+        # Explains a rejection: the required groups that have no token in the sequence
+        missing = []
+        for group in self.profile.groups:
+            if not group.required:
+                continue
+            found = False
+            for token in group.tokens:
+                if token in tokens:
+                    found = True
+            if not found:
+                missing.append(group.name)
+        return missing
 
 
-def build_profile_automaton(profile_config: dict[str, object]) -> ProfileAutomaton:
-    """Construct a profile automaton from a config dictionary.
-
-    The project intentionally can operate with a small custom automaton wrapper and still
-    document the pyformlang-based formal model in the design docs. This is a practical
-    skeleton for the assignment.
-    """
-
-    name = str(profile_config.get("name", "UNKNOWN"))
-    states = [f"q{i}" for i in range(0, len(profile_config.get("sequence", [])) + 2)]
-    alphabet = set()
-    transitions: dict[tuple[str, str], set[str]] = {}
-    sequence = profile_config.get("sequence", [])
-    states = [f"q{i}" for i in range(0, len(sequence) + 1)]
-
-    for idx, segment in enumerate(sequence):
-        for token in segment:
-            alphabet.add(str(token))
-            current = states[idx]
-            target = states[idx + 1]
-            transitions.setdefault((current, str(token)), set()).add(target)
-
-    start_state = states[0]
-    accepting_states = {states[-1]}
-
-    return ProfileAutomaton(
-        profile_name=name,
-        states=states,
-        alphabet=alphabet,
-        transitions=transitions,
-        start_state=start_state,
-        accepting_states=accepting_states,
-    )
-
-
-def build_default_automata(profile_configs: dict[str, dict[str, object]]) -> dict[str, ProfileAutomaton]:
-    """Return all project automata keyed by profile name."""
-
-    return {name: build_profile_automaton(config) for name, config in profile_configs.items()}
+def build_automata(profiles):
+    automata = {}
+    for name in profiles:
+        automata[name] = ProfileAutomaton(profiles[name])
+    return automata

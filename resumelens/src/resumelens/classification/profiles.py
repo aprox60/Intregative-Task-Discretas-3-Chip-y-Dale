@@ -94,18 +94,3 @@ PROFILES = load_profiles()
 
 def get_profile_names():
     return list(PROFILES.keys())
-
-
-# Temporary version for the current automaton builder:
-# only the required groups, as a sequence
-PROFILE_CONFIGS = {}
-for profile_name in PROFILES:
-    sequence = []
-    for group in PROFILES[profile_name].groups:
-        if group.required:
-            sequence.append(group.tokens)
-    PROFILE_CONFIGS[profile_name] = {
-        "name": profile_name,
-        "sequence": sequence,
-        "description": PROFILES[profile_name].description,
-    }
