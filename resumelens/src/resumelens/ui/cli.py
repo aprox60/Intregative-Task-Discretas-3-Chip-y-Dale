@@ -16,7 +16,7 @@ def main():
         text = file.read()
 
     result = run_resume_pipeline(text)
-    print("Normalized tokens:", result.normalized_tokens)
+    print("Normalized tokens:", result.normalization.tokens)
     for profile_name in result.sorted_by_profile:
         print(profile_name, result.sorted_by_profile[profile_name], "->", result.classification[profile_name])
 
