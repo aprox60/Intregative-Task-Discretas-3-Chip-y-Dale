@@ -1,0 +1,53 @@
+{
+  "name": "Kim Possible",
+  "emails": [
+    "kim.possible@middleton.edu"
+  ],
+  "phones": [
+    "+1 555 010 2030"
+  ],
+  "links": [
+    "github.com/kimpossible"
+  ],
+  "programming_languages": [
+    "TypeScript"
+  ],
+  "frameworks": [
+    "Angular",
+    "Express.js"
+  ],
+  "libraries": [],
+  "databases": [
+    "MongoDB"
+  ],
+  "tools": [
+    "GitHub",
+    "Docker",
+    "Git"
+  ],
+  "other_qualifications": [
+    "GraphQL"
+  ],
+  "education": [
+    {
+      "degree": "BSc",
+      "field": "Computer Engineering",
+      "institution": "Middleton University"
+    }
+  ],
+  "experience": [
+    {
+      "years": 6,
+      "description": "building web platforms end to end"
+    }
+  ],
+  "skills_section": [
+    "TypeScript",
+    "Angular",
+    "Express.js",
+    "MongoDB",
+    "GraphQL",
+    "Docker",
+    "Git"
+  ]
+}

@@ -170,9 +170,42 @@ def interactive_menu(ask=input):
             print("Invalid option.")
 
 
+def short_status(accepted):
+    if accepted:
+        return "ACCEPTED"
+    return "-"
+
+
+def run_batch(folder=SAMPLES_DIR, output_folder=OUTPUT_DIR):
+    # Runs every .txt resume of a folder, saves its outputs and returns a summary table
+    profile_names = list(PROFILES.keys())
+    header = "Resume".ljust(36)
+    for name in profile_names:
+        header = header + PROFILES[name].display_name.split(" ")[0].ljust(12)
+    header = header + "DSL"
+    lines = [header, "-" * len(header)]
+
+    for filename in sorted(os.listdir(folder)):
+        if not filename.endswith(".txt"):
+            continue
+        result = run_resume_file(os.path.join(folder, filename))
+        save_outputs(result, filename.replace(".txt", ""), output_folder)
+
+        row = filename.ljust(36)
+        for name in profile_names:
+            row = row + short_status(result.classification[name]).ljust(12)
+        if result.error is None:
+            row = row + "valid"
+        else:
+            row = row + "rejected (" + result.error.kind.lower() + ")"
+        lines.append(row)
+    return "\n".join(lines)
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="ResumeLens: formal language based resume screening")
     parser.add_argument("resume_path", nargs="?", default=None, help="resume text file (without it, the interactive menu opens)")
+    parser.add_argument("--all", action="store_true", help="analyze every sample resume and save the outputs in data/output")
     parser.add_argument("--details", action="store_true", help="show every transducer step and the generated DSL")
     parser.add_argument("--save", action="store_true", help="save the JSON, DSL and HTML in data/output")
     parser.add_argument("--output-html", default=None, help="save the HTML report in this path")
@@ -181,6 +214,11 @@ def build_parser():
 
 def main(arguments=None):
     args = build_parser().parse_args(arguments)
+    if args.all:
+        print(run_batch())
+        print("\nOutputs saved in " + OUTPUT_DIR)
+        return 0
+
     if args.resume_path is None:
         interactive_menu()
         return 0

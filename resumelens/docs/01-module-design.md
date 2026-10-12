@@ -87,6 +87,7 @@ resume text ─► extraction ─► normalization ─► classification ─► 
 | `format_report(result, details)` | `PipelineResult` | stage-by-stage text report |
 | `save_outputs(result, base_name, folder)` | result, name | writes `.json`, `.resume` (DSL) and `.html` |
 | `show_profiles()` | — | text with the groups of each profile |
+| `run_batch(folder, output_folder)` | folder of résumés | runs every `.txt`, saves its outputs and returns a summary table (`--all`) |
 
 ## Documentation export (`docs_export.py`)
 

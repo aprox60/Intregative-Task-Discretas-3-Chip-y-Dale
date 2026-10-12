@@ -11,6 +11,7 @@ All tests are automated with **pytest** and run with `python -m pytest` from the
 | `tests/test_dsl.py` | 17 | stage 4: valid documents, lexical, syntax and semantic errors |
 | `tests/test_pipeline_e2e.py` | 7 | the four stages together, from text to HTML |
 | `tests/test_cli.py` | 10 | the user interface (arguments, saving, interactive menu) |
+| `tests/test_batch.py` | 4 | batch mode: every sample, expected summary, saved files |
 
 ## Sample résumés (`data/sample_resumes/`)
 
@@ -100,3 +101,4 @@ All tests are automated with **pytest** and run with `python -m pytest` from the
 | U1 | Report | shows the four stages, the automaton type and the missing groups |
 | U2 | Saving | `.json`, `.resume` and `.html` written; `--output-html` works |
 | U3 | Menu | analyze a sample, paste a résumé, list profiles, invalid option, exit |
+| U4 | Batch mode (`--all`) | one row per sample with the expected results; `.json` and `.resume` for all of them, `.html` only when the DSL is valid |

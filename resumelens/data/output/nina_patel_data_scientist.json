@@ -1,0 +1,55 @@
+{
+  "name": "Nina Patel",
+  "emails": [
+    "nina.patel@example.com"
+  ],
+  "phones": [
+    "+44 20 7946 0958"
+  ],
+  "links": [],
+  "programming_languages": [
+    "R",
+    "Python"
+  ],
+  "frameworks": [],
+  "libraries": [
+    "pandas",
+    "numpy",
+    "Matplotlib",
+    "Seaborn"
+  ],
+  "databases": [
+    "PostgreSQL"
+  ],
+  "tools": [
+    "Power BI"
+  ],
+  "other_qualifications": [
+    "statistical analysis",
+    "Statistics"
+  ],
+  "education": [
+    {
+      "degree": "Master's",
+      "field": "Applied Statistics",
+      "institution": "University of Leeds"
+    }
+  ],
+  "experience": [
+    {
+      "years": 4,
+      "description": "statistical analysis and data visualization for retail companies"
+    }
+  ],
+  "skills_section": [
+    "R",
+    "Python",
+    "pandas",
+    "numpy",
+    "Statistics",
+    "Matplotlib",
+    "Seaborn",
+    "Power BI",
+    "PostgreSQL"
+  ]
+}

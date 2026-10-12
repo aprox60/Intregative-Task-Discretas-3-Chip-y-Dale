@@ -70,6 +70,23 @@ Options:
 | `--details` | shows every transducer step (`React.js → reactjs → REACT`) and the generated DSL |
 | `--save` | saves the extraction JSON, the DSL (`.resume`) and the HTML in `data/output/` |
 | `--output-html PATH` | saves only the HTML report in `PATH` |
+| `--all` | analyzes every sample résumé, saves all the outputs in `data/output/` and prints a summary table |
+
+Summary of the sample résumés (`python -m resumelens --all`):
+
+```text
+Resume                              Full        Machine     Backend     Data        DSL
+---------------------------------------------------------------------------------------
+alex_rivera_backend.txt             -           -           ACCEPTED    -           valid
+invalid_edge_case.txt               -           -           -           -           rejected (syntax)
+invalid_missing_qualification.txt   -           -           -           -           valid
+kim_possible_multi_profile.txt      ACCEPTED    -           ACCEPTED    -           valid
+mary_jane_watson.txt                -           ACCEPTED    -           -           valid
+nina_patel_data_scientist.txt       -           -           -           ACCEPTED    valid
+wednesday_addams.txt                ACCEPTED    -           -           -           valid
+```
+
+The generated JSON, DSL (`.resume`) and HTML files of every sample are already in `data/output/`.
 
 Example output (shortened):
 

@@ -1,0 +1,47 @@
+{
+  "name": "Wednesday Addams",
+  "emails": [
+    "wednesday@nevermore.edu"
+  ],
+  "phones": [
+    "+57 300 123 4567"
+  ],
+  "links": [
+    "https://wednesday.dev"
+  ],
+  "programming_languages": [
+    "JS"
+  ],
+  "frameworks": [
+    "React.js",
+    "NodeJS"
+  ],
+  "libraries": [],
+  "databases": [
+    "Postgres"
+  ],
+  "tools": [
+    "Git"
+  ],
+  "other_qualifications": [],
+  "education": [
+    {
+      "degree": "BS",
+      "field": "Computer Science",
+      "institution": "Nevermore Academy"
+    }
+  ],
+  "experience": [
+    {
+      "years": 3,
+      "description": "developing web applications"
+    }
+  ],
+  "skills_section": [
+    "JS",
+    "React.js",
+    "NodeJS",
+    "Postgres",
+    "Git"
+  ]
+}
