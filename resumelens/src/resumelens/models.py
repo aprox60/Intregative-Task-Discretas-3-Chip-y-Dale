@@ -1,65 +1,129 @@
-from __future__ import annotations
+import json
 
-from dataclasses import dataclass, field
-from typing import Any
-
-
-@dataclass
-class ExtractedItem:
-    """A single extracted piece of evidence from the raw résumé text."""
-
-    category: str
-    value: str
-    source: str = "raw"
-    normalized: str | None = None
+# Technical categories found in stage 1. Each one is normalized later by its own transducer.
+TECHNICAL_CATEGORIES = [
+    "programming_languages",
+    "frameworks",
+    "libraries",
+    "databases",
+    "tools",
+    "other_qualifications",
+]
 
 
-@dataclass
-class Candidate:
-    """Structured candidate model used across the pipeline."""
+class Education:
+    # An academic qualification, for example "BS in Computer Science"
 
-    full_name: str = ""
-    email: str = ""
-    phone: str = ""
-    links: list[str] = field(default_factory=list)
-    skills: list[str] = field(default_factory=list)
-    academic_qualifications: list[str] = field(default_factory=list)
-    experience: list[str] = field(default_factory=list)
-    profile_results: dict[str, bool] = field(default_factory=dict)
+    def __init__(self, degree, field, institution=""):
+        self.degree = degree
+        self.field = field
+        self.institution = institution
+
+    def to_dict(self):
+        return {"degree": self.degree, "field": self.field, "institution": self.institution}
 
 
-@dataclass
-class ProfileResult:
-    """Result object for a specific classification profile."""
+class Experience:
+    # For example "3 years of experience developing web applications"
 
-    profile_name: str
-    accepted: bool
-    reasons: list[str] = field(default_factory=list)
+    def __init__(self, years, description=""):
+        self.years = years
+        self.description = description
+
+    def to_dict(self):
+        return {"years": self.years, "description": self.description}
 
 
-@dataclass
+class ExtractionResult:
+    # Raw strings found by the regular expressions (nothing is normalized yet)
+
+    def __init__(self):
+        self.name = ""
+        self.emails = []
+        self.phones = []
+        self.links = []
+        self.programming_languages = []
+        self.frameworks = []
+        self.libraries = []
+        self.databases = []
+        self.tools = []
+        self.other_qualifications = []
+        self.education = []
+        self.experience = []
+        self.skills_section = []
+
+    def get_technical_items(self):
+        # Technical strings by category, this is the input of stage 2
+        return {
+            "programming_languages": self.programming_languages,
+            "frameworks": self.frameworks,
+            "libraries": self.libraries,
+            "databases": self.databases,
+            "tools": self.tools,
+            "other_qualifications": self.other_qualifications,
+        }
+
+    def get_all_technical_strings(self):
+        result = []
+        items = self.get_technical_items()
+        for category in TECHNICAL_CATEGORIES:
+            for value in items[category]:
+                result.append(value)
+        return result
+
+    def get_unrecognized_skills(self):
+        # Items written under "Skills:" that no technical regex found
+        found = []
+        for value in self.get_all_technical_strings():
+            found.append(value.lower())
+
+        unrecognized = []
+        for item in self.skills_section:
+            if item.lower() not in found:
+                unrecognized.append(item)
+        return unrecognized
+
+    def to_dict(self):
+        education = []
+        for entry in self.education:
+            education.append(entry.to_dict())
+        experience = []
+        for entry in self.experience:
+            experience.append(entry.to_dict())
+
+        data = {
+            "name": self.name,
+            "emails": self.emails,
+            "phones": self.phones,
+            "links": self.links,
+        }
+        data.update(self.get_technical_items())
+        data["education"] = education
+        data["experience"] = experience
+        data["skills_section"] = self.skills_section
+        return data
+
+    def to_json(self):
+        return json.dumps(self.to_dict(), indent=2, ensure_ascii=False)
+
+
 class PipelineResult:
-    """Result returned by the resume pipeline orchestration."""
+    # Everything the pipeline produces for one resume
 
-    candidate: Candidate
-    extracted: dict[str, list[str]]
-    normalized_tokens: list[str]
-    classification: dict[str, bool]
-    dsl_text: str = ""
-    html: str = ""
-    notes: list[str] = field(default_factory=list)
+    def __init__(self):
+        self.extraction = None
+        self.normalization = None
+        self.sorted_by_profile = {}
+        self.classification = {}
+        self.dsl_text = ""
+        self.model = None
+        self.html = ""
+        # ResumeValidationError when the generated DSL is rejected by the grammar
+        self.error = None
 
-
-def make_candidate_from_payload(payload: dict[str, Any]) -> Candidate:
-    """Factory for constructing a Candidate from a dictionary payload."""
-
-    return Candidate(
-        full_name=str(payload.get("full_name", "")),
-        email=str(payload.get("email", "")),
-        phone=str(payload.get("phone", "")),
-        links=list(payload.get("links", [])),
-        skills=list(payload.get("skills", [])),
-        academic_qualifications=list(payload.get("academic_qualifications", [])),
-        experience=list(payload.get("experience", [])),
-        profile_results=dict(payload.get("profile_results", {})),
-    )
+    def get_accepted_profiles(self):
+        accepted = []
+        for profile_name in self.classification:
+            if self.classification[profile_name]:
+                accepted.append(profile_name)
+        return accepted

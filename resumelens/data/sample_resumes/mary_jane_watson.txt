@@ -1,6 +1,11 @@
 Mary Jane Watson
-Email: mary@example.com
-Phone: +12125550123
-Skills: Python, pandas, scikit-learn, TensorFlow, PostgreSQL, Git.
-Education: MSc in Data Science.
-Experience: 4 years of experience in machine learning.
+Email: mj.watson@dailybugle.com
+Phone: +1 212 555 0123
+LinkedIn: linkedin.com/in/mjwatson
+
+2 years of experience developing predictive models and data-processing pipelines.
+
+Technical Skills:
+Python, Pandas, NumPy, Scikit-learn, TensorFlow, SQL, Git.
+
+Education: MSc in Data Science, Empire State University.

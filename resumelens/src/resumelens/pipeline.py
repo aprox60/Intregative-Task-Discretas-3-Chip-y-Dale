@@ -1,46 +1,37 @@
-from __future__ import annotations
-
 from resumelens.classification.classifier import classify_all_profiles
-from resumelens.dsl.generator import candidate_to_dsl
+from resumelens.classification.profiles import PROFILES
+from resumelens.dsl.generator import generate_dsl
+from resumelens.dsl.parser import ResumeValidationError, parse_dsl
 from resumelens.dsl.visualizer import render_html
 from resumelens.extraction.extractor import ResumeExtractor
-from resumelens.models import Candidate, PipelineResult
-from resumelens.normalization.lexicon import normalize_tokens
-from resumelens.normalization.sorter import sort_candidates
+from resumelens.models import PipelineResult
+from resumelens.normalization.normalizer import normalize_extraction
+from resumelens.normalization.sorter import sort_for_all_profiles
 
 
-def run_resume_pipeline(raw_text: str, profile_name: str | None = None) -> PipelineResult:
-    """Run the full ResumeLens pipeline on a raw résumé string.
+def run_resume_pipeline(raw_text):
+    result = PipelineResult()
 
-    The pipeline intentionally uses the generic profile abstraction described in the
-    assignment: one pipeline, multiple profile checks, and explicit pattern validation only.
-    """
+    # Stage 1: regular expressions
+    result.extraction = ResumeExtractor(raw_text).extract()
 
-    extracted = ResumeExtractor(raw_text).extract()
-    skill_tokens = extracted.get("skills", [])
-    normalized = normalize_tokens(skill_tokens)
-    ordered = sort_candidates(normalized, profile_name)
-    classification = classify_all_profiles(ordered)
+    # Stage 2: transducers and canonical order of each profile
+    result.normalization = normalize_extraction(result.extraction)
+    result.sorted_by_profile = sort_for_all_profiles(result.normalization.tokens, PROFILES)
 
-    candidate = Candidate(
-        full_name="Candidate",
-        email=extracted.get("email", ["example@example.com"])[0] if extracted.get("email") else "example@example.com",
-        phone=extracted.get("phone", ["+0000000000"])[0] if extracted.get("phone") else "+0000000000",
-        links=extracted.get("links", []),
-        skills=ordered,
-        academic_qualifications=extracted.get("academic_qualifications", []),
-        experience=extracted.get("experience", []),
-        profile_results=classification,
-    )
+    # Stage 3: each profile automaton reads its own sorted sequence
+    result.classification = classify_all_profiles(result.sorted_by_profile)
 
-    dsl_text = candidate_to_dsl(candidate)
-    html = render_html(candidate)
-    return PipelineResult(
-        candidate=candidate,
-        extracted=extracted,
-        normalized_tokens=ordered,
-        classification=classification,
-        dsl_text=dsl_text,
-        html=html,
-        notes=["Pipeline executed successfully.", "Pattern-based classification only."],
-    )
+    # Stage 4: DSL, validation with the textX grammar and visualization
+    result.dsl_text = generate_dsl(result.extraction, result.normalization.tokens, result.classification)
+    try:
+        result.model = parse_dsl(result.dsl_text)
+        result.html = render_html(result.model)
+    except ResumeValidationError as error:
+        result.error = error
+    return result
+
+
+def run_resume_file(path):
+    with open(path, encoding="utf-8") as file:
+        return run_resume_pipeline(file.read())

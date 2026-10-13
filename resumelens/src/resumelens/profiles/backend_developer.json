@@ -1,0 +1,15 @@
+{
+  "name": "BACKEND_DEVELOPER",
+  "display_name": "Backend Developer",
+  "area": "software",
+  "automaton_type": "NFA",
+  "description": "Builds server-side services: a backend language and framework, persistent storage, HTTP APIs, containerized deployment and version control. No frontend evidence is required.",
+  "groups": [
+    {"name": "LANGUAGE", "tokens": ["JAVA", "PYTHON", "GO", "CSHARP", "KOTLIN", "JAVASCRIPT", "TYPESCRIPT"], "required": true},
+    {"name": "FRAMEWORK", "tokens": ["SPRING_BOOT", "DJANGO", "FLASK", "FASTAPI", "NODE_JS", "EXPRESS", "DOTNET"], "required": true},
+    {"name": "DATABASE", "tokens": ["SQL", "POSTGRESQL", "MYSQL", "MONGODB", "REDIS"], "required": true},
+    {"name": "API", "tokens": ["REST_API", "GRAPHQL"], "required": true},
+    {"name": "CONTAINERS", "tokens": ["DOCKER", "KUBERNETES"], "required": true},
+    {"name": "VERSION_CONTROL", "tokens": ["GIT"], "required": true}
+  ]
+}

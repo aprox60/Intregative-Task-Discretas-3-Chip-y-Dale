@@ -1,0 +1,9 @@
+Nina Patel
+Email: nina.patel@example.com
+Phone: +44 20 7946 0958
+
+4 years of experience in statistical analysis and data visualization for retail companies.
+
+Skills: R, Python, pandas, numpy, Statistics, Matplotlib, Seaborn, Power BI, PostgreSQL.
+
+Education: Master's in Applied Statistics, University of Leeds.

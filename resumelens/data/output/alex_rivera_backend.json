@@ -1,0 +1,55 @@
+{
+  "name": "Alex Rivera",
+  "emails": [
+    "alex.rivera@example.com"
+  ],
+  "phones": [
+    "(602) 555-0187"
+  ],
+  "links": [
+    "github.com/arivera"
+  ],
+  "programming_languages": [
+    "Java"
+  ],
+  "frameworks": [
+    "Spring Boot"
+  ],
+  "libraries": [],
+  "databases": [
+    "MySQL",
+    "Redis"
+  ],
+  "tools": [
+    "GitHub",
+    "Docker",
+    "Kubernetes"
+  ],
+  "other_qualifications": [
+    "RESTful APIs",
+    "REST APIs"
+  ],
+  "education": [
+    {
+      "degree": "BSc",
+      "field": "Software Engineering",
+      "institution": "Universidad Icesi"
+    }
+  ],
+  "experience": [
+    {
+      "years": 5,
+      "description": "building backend services and RESTful APIs for payment platforms"
+    }
+  ],
+  "skills_section": [
+    "Java",
+    "Spring Boot",
+    "MySQL",
+    "Redis",
+    "REST APIs",
+    "Docker",
+    "Kubernetes",
+    "GitHub"
+  ]
+}

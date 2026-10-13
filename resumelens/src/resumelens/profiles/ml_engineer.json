@@ -1,12 +1,14 @@
 {
   "name": "MACHINE_LEARNING_ENGINEER",
-  "required_tokens": ["PYTHON", "PANDAS", "SCIKIT_LEARN", "POSTGRESQL", "GIT"],
-  "sequence": [
-    ["PYTHON"],
-    ["PANDAS", "NUMPY"],
-    ["SCIKIT_LEARN", "TENSORFLOW", "PYTORCH"],
-    ["SQL", "POSTGRESQL"],
-    ["GIT"]
-  ],
-  "description": "Machine learning engineer profile with Python, data science libraries, ML frameworks, SQL, and Git."
+  "display_name": "Machine Learning Engineer",
+  "area": "ai_data",
+  "automaton_type": "DFA",
+  "description": "Combines software development, data processing and machine-learning frameworks to build learning-based systems.",
+  "groups": [
+    {"name": "LANGUAGE", "tokens": ["PYTHON"], "required": true},
+    {"name": "DATA_LIBRARY", "tokens": ["PANDAS", "NUMPY"], "required": true},
+    {"name": "ML_FRAMEWORK", "tokens": ["SCIKIT_LEARN", "TENSORFLOW", "PYTORCH", "KERAS"], "required": true},
+    {"name": "DATABASE", "tokens": ["SQL", "POSTGRESQL", "MYSQL"], "required": true},
+    {"name": "VERSION_CONTROL", "tokens": ["GIT"], "required": true}
+  ]
 }

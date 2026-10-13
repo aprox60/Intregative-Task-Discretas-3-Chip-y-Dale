@@ -1,126 +1,141 @@
-from __future__ import annotations
+# Stage 1: regular expressions used to find information in the resume text.
+#
+# These patterns only find strings. Deciding that "JS" and "JavaScript" are the same
+# thing is done by the transducers (stage 2), and deciding if a candidate fits a
+# profile is done by the automata (stage 3).
 
 import re
 
+# Python's \b does not work well with names like "Node.js" or "C#", because "." "+" and
+# "#" are not word characters. So we use our own boundaries:
+# BEFORE: the previous character is not a letter, digit, "_", "+", "#", "&" or "."
+# (that way the "JS" of "Node.JS" is not taken as a language)
+# AFTER: the next character is not one of those either, and it can't be ".something"
+# (that way "github" inside "github.com/..." is not taken as the tool Git)
+BEFORE = r"(?<![\w+#&.])"
+AFTER = r"(?![\w+#&]|\.\w)"
 
-def build_pattern_catalog() -> dict[str, re.Pattern[str]]:
-    """Build a dictionary of regular-expression patterns for relevant résumé features.
-
-    These patterns are intentionally lightweight and local. They capture explicit textual
-    evidence but do not decide whether a candidate matches a profile.
-    """
-
-    return {
-        "email": re.compile(r"(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b"),
-        "phone": re.compile(
-            r"(?i)(?:\+?\d{1,3}[-.\s]?)?(?:\(?\d{2,4}\)?[-.\s]?)\d{3}[-.\s]?\d{4}"
-        ),
-        "url": re.compile(r"(?i)https?://\S+|www\.\S+"),
-        "programming_language": re.compile(
-            r"(?i)\b(python|javascript|js|java|c\+\+|c#|ruby|php|go|rust|swift|typescript)\b"
-        ),
-        "framework": re.compile(
-            r"(?i)\b(react|react\.js|node\.js|nodejs|django|spring\s*boot|flask|angular|vue|pandas|scikit\-learn|tensorflow|pytorch)\b"
-        ),
-        "database": re.compile(r"(?i)\b(postgres|postgresql|mysql|mongodb|sqlite|redis|sql)\b"),
-        "tool": re.compile(r"(?i)\b(git|docker|kubernetes|linux|aws|azure|jenkins|figma)\b"),
-        "academic_qualification": re.compile(
-            r"(?i)\b(bsc|bs|ba|msc|m\.sc|phd|master\s*degree|bachelor\s*degree)\b"
-        ),
-        "experience": re.compile(
-            r"(?i)(\d+(?:\.\d+)?)\s*(?:years?|yrs?)\s*(?:of\s+)?experience"
-        ),
-    }
+# Optional separator between the parts of a name: "Scikit-learn", "scikit learn", "scikitlearn"
+SEP = r"[\s.\-]?"
 
 
-def extract_by_category(text: str, category: str) -> list[str]:
-    """Return all matches for a specific extraction category."""
+# ---------- Personal and contact information ----------
 
-    catalog = build_pattern_catalog()
-    pattern = catalog.get(category)
-    if pattern is None:
-        raise ValueError(f"Unknown extraction category: {category}")
-    return [match.group(0).strip() for match in pattern.finditer(text)]
+NAME_REGEX = re.compile(r"[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]+(\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]+){1,4}")
 
+EMAIL_REGEX = re.compile(r"(?<![\w.+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}(?![\w-])")
 
-def extract_contact_info(text: str) -> dict[str, list[str]]:
-    """Extract contact information and return the raw values as a dictionary."""
+PHONE_REGEX = re.compile(r"(?<![\w+])(\+?\(?\d{1,4}\)?([\s.\-]\d{2,4}){2,4}|\+?\d{7,15})(?!\w)")
 
-    return {
-        "email": extract_by_category(text, "email"),
-        "phone": extract_by_category(text, "phone"),
-        "links": extract_by_category(text, "url"),
-    }
+URL_REGEX = re.compile(
+    r"(https?://|www\.)[^\s,;]*[^\s,;.]|(?<![\w.])(linkedin|github)\.com/[^\s,;]*[^\s,;.]",
+    re.IGNORECASE,
+)
 
 
-def extract_programming_languages(text: str) -> list[str]:
-    """Extract programming languages using the programming-language regex."""
+# ---------- Technical qualifications (each category has its own transducer in stage 2) ----------
 
-    return extract_by_category(text, "programming_language")
+LANGUAGE_REGEX = re.compile(
+    BEFORE + r"(java[\s\-]?script|type[\s\-]?script|python(\s?3)?|java|golang|kotlin|c\s?#|c[\s\-]sharp|csharp)" + AFTER,
+    re.IGNORECASE,
+)
+
+# Short names that are also normal words ("go home", "R&D"), so they only count
+# when they are written exactly like this
+LANGUAGE_SHORT_REGEX = re.compile(BEFORE + r"(JS|TS|Go|R)" + AFTER)
+
+FRAMEWORK_REGEX = re.compile(
+    BEFORE
+    + r"(react(" + SEP + r"js)?|angular(" + SEP + r"js)?|vue(" + SEP + r"js)?|node(" + SEP + r"js)?"
+    + r"|express" + SEP + r"js|django|flask|fast[\s\-]?api|spring[\s\-]?boot"
+    + r"|asp\.net(\s?core)?|\.net(\s?core)?|dotnet)"
+    + AFTER,
+    re.IGNORECASE,
+)
+
+# "express" alone is a normal word, so without ".js" it has to start with a capital letter
+FRAMEWORK_SHORT_REGEX = re.compile(BEFORE + r"(Express)" + AFTER)
+
+LIBRARY_REGEX = re.compile(
+    BEFORE
+    + r"(pandas|num[\s\-]?py|scikit[\s\-]?learn|sk[\s\-]?learn|tensor[\s\-]?flow|py[\s\-]?torch|keras"
+    + r"|matplotlib|seaborn|plotly)"
+    + AFTER,
+    re.IGNORECASE,
+)
+
+DATABASE_REGEX = re.compile(
+    BEFORE + r"(postgres|postgre\s?sql|my\s?sql|mongo(\s?db)?|sqlite|redis|sql)" + AFTER,
+    re.IGNORECASE,
+)
+
+TOOL_REGEX = re.compile(
+    BEFORE + r"(git|github|gitlab|docker|kubernetes|k8s|tableau|power[\s\-]?bi)" + AFTER,
+    re.IGNORECASE,
+)
+
+OTHER_REGEX = re.compile(
+    BEFORE + r"(rest(ful)?[\s\-]?apis?|restful|graph\s?ql|statistics|statistical(\s+(analysis|modeling|modelling))?)" + AFTER,
+    re.IGNORECASE,
+)
+
+# "rest" alone is a normal word, so it only counts in upper case
+OTHER_SHORT_REGEX = re.compile(BEFORE + r"(REST)" + AFTER)
+
+# Each technical category with the regexes that find it
+TECHNICAL_REGEXES = {
+    "programming_languages": [LANGUAGE_REGEX, LANGUAGE_SHORT_REGEX],
+    "frameworks": [FRAMEWORK_REGEX, FRAMEWORK_SHORT_REGEX],
+    "libraries": [LIBRARY_REGEX],
+    "databases": [DATABASE_REGEX],
+    "tools": [TOOL_REGEX],
+    "other_qualifications": [OTHER_REGEX, OTHER_SHORT_REGEX],
+}
 
 
-def extract_frameworks(text: str) -> list[str]:
-    """Extract frameworks, libraries, and platforms from the raw text."""
+# ---------- Education, experience and skills section ----------
 
-    return extract_by_category(text, "framework")
+EDUCATION_REGEX = re.compile(
+    r"(?<!\w)(?P<degree>Ph\.?\s?D\.?|M\.?\s?Sc\.?|B\.?\s?Sc\.?|M\.?S\.?|B\.?S\.?|B\.?A\.?|M\.?A\.?|Doctorate"
+    r"|(Bachelor|Master)('s)?(\s+of\s+(Science|Arts|Engineering))?)"
+    r"(\s+degree)?\s+(in|of)\s+"
+    r"(?P<field>[A-Z][A-Za-z&/ ]*?[A-Za-z])"
+    r"((\s*[,\-]\s*|\s+(at|from)\s+)(?P<institution>[A-Z][\w&.' ]*?\w))?"
+    r"\s*(?=[.;\n]|$)"
+)
 
+EXPERIENCE_REGEX = re.compile(
+    r"(?<!\w)(?P<years>\d{1,2})\+?\s*(years?|yrs?)\s+of\s+(professional\s+)?experience(\s+(?P<description>[^.\n]+))?",
+    re.IGNORECASE,
+)
 
-def extract_databases(text: str) -> list[str]:
-    """Extract database technology names."""
+SKILLS_SECTION_REGEX = re.compile(r"^\s*(technical\s+)?skills\s*:\s*(?P<items>.+)$", re.IGNORECASE | re.MULTILINE)
 
-    return extract_by_category(text, "database")
+SKILL_SEPARATOR_REGEX = re.compile(r"\s*[,;|]\s*")
 
-
-def extract_tools(text: str) -> list[str]:
-    """Extract tools and technologies."""
-
-    return extract_by_category(text, "tool")
-
-
-def extract_academic_qualifications(text: str) -> list[str]:
-    """Extract education and academic qualification evidence."""
-
-    return extract_by_category(text, "academic_qualification")
-
-
-def extract_experience(text: str) -> list[str]:
-    """Extract experience evidence such as '3 years of experience'."""
-
-    return extract_by_category(text, "experience")
+LEADING_PREPOSITION_REGEX = re.compile(r"^(in|as|with|on)\s+", re.IGNORECASE)
 
 
-def extract_generic_skills(text: str) -> list[str]:
-    """Collect all generic skill evidence into one list.
-
-    This function is intentionally broad and does not decide whether the skill is relevant
-    to a specific profile. The formal profile pattern is decided later in the pipeline.
-    """
-
-    variant_patterns = re.compile(
-        r"(?i)\b(?:react(?:[\s.-]?js)?|node(?:[\s.-]?js)?|nodejs|postgres(?:ql)?|javascript|js|git|python|pandas|scikit(?:[\s-]?learn)|tensorflow|pytorch|sql|numpy)\b"
-    )
-    matches = [match.group(0).strip() for match in variant_patterns.finditer(text)]
-    return [match for index, match in enumerate(matches) if match and match not in matches[:index]]
-
-
-def extract_candidate_evidence(text: str) -> dict[str, list[str]]:
-    """Return a dictionary of extracted evidence grouped by category."""
-
-    contact = extract_contact_info(text)
-    return {
-        "contact": [
-            *contact["email"],
-            *contact["phone"],
-            *contact["links"],
-        ],
-        "email": contact["email"],
-        "phone": contact["phone"],
-        "links": contact["links"],
-        "programming_languages": extract_programming_languages(text),
-        "frameworks": extract_frameworks(text),
-        "databases": extract_databases(text),
-        "tools": extract_tools(text),
-        "academic_qualifications": extract_academic_qualifications(text),
-        "experience": extract_experience(text),
-        "skills": extract_generic_skills(text),
-    }
+# Language recognized by each pattern (used in the docs)
+DESCRIPTIONS = {
+    "name": "Two to five capitalized words separated by spaces. It is only checked against the first non-empty line.",
+    "emails": "local part, '@', domain labels separated by dots and a top level domain of 2 or more letters.",
+    "phones": "Optional '+', then a prefix (can be in parentheses) followed by 2 to 4 digit blocks, each one "
+              "after exactly one space, dot or hyphen. Or 7 to 15 digits together.",
+    "links": "Text that starts with http://, https:// or www. (or linkedin.com/, github.com/) until the next space or comma.",
+    "programming_languages": "JavaScript, TypeScript, Python, Java, Go, Kotlin, C# and R with their usual spellings. "
+                             "JS, TS, Go and R only with that exact capitalization.",
+    "frameworks": "React, Angular, Vue, Node and Express with or without '.js'/'JS', plus Django, Flask, FastAPI, "
+                  "Spring Boot and .NET.",
+    "libraries": "Python data, machine learning and plotting libraries, allowing a space or hyphen inside "
+                 "compound names (Tensor Flow, Scikit-learn, Py Torch).",
+    "databases": "PostgreSQL/Postgres, MySQL, MongoDB/Mongo, SQLite, Redis and the SQL language.",
+    "tools": "Git, GitHub, GitLab, Docker, Kubernetes/k8s, Tableau and Power BI.",
+    "other_qualifications": "REST, RESTful, REST APIs, GraphQL, statistics and statistical analysis. "
+                            "REST alone only in upper case.",
+    "education": "A degree (BS, BSc, MSc, PhD, Bachelor's, Master's...) followed by 'in' or 'of', a field that starts "
+                 "with a capital letter and optionally ', Institution' or 'at Institution'.",
+    "experience": "A number of years, 'years of experience' and an optional description until the end of the sentence.",
+    "skills_section": "A line that starts with 'Skills:' or 'Technical Skills:'. Its items are split by commas, "
+                      "semicolons or bars.",
+}

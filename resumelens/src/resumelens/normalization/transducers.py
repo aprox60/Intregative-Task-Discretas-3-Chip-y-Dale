@@ -1,93 +1,141 @@
-from __future__ import annotations
+# Stage 2: finite-state transducers built with pyformlang.
+#
+# Each transducer is M = (Q, Sigma, Gamma, delta, omega, q0, F). We build the pyformlang FST
+# and we also keep every part of the 7-tuple, so we can print the formal definition and
+# draw the diagram from the same object.
+#
+# Two kinds of transducers are used:
+# 1. PREPROCESSING: one state. It changes upper case letters to lower case and deletes the
+#    separators (space, ".", "-", "_", "/"). "Scikit-learn" -> "scikitlearn"
+# 2. One transducer per technical category. It reads the preprocessed word character by
+#    character (a trie) and when it reads the end mark "$" it writes the canonical token.
+#    "scikitlearn$" -> SCIKIT_LEARN
 
-from dataclasses import dataclass, field
+import string
 
-from resumelens.normalization.lexicon import build_lexicon, normalize_token
+from pyformlang.fst import FST
 
-try:
-    from pyformlang.fst import FST
-except Exception:  # pragma: no cover - fallback when dependency is unavailable
-    FST = None
+from resumelens.normalization.variants import VARIANTS_BY_CATEGORY
 
+# End of word mark. Without it the transducer could not know if "postgres" ends there
+# or if it continues as "postgresql"
+END_MARK = "$"
 
-@dataclass
-class FSTDescriptor:
-    """A concise descriptor of the transducer tuple M = (Q, Σ, Γ, δ, ω, q0, F)."""
-
-    states: list[str]
-    input_alphabet: set[str] = field(default_factory=set)
-    output_alphabet: set[str] = field(default_factory=set)
-    transitions: dict[tuple[str, str], tuple[str, str]] = field(default_factory=dict)
-    start_state: str = "q0"
-    accepting_states: set[str] = field(default_factory=set)
-
-    def as_dict(self) -> dict[str, object]:
-        return {
-            "Q": self.states,
-            "Σ": sorted(self.input_alphabet),
-            "Γ": sorted(self.output_alphabet),
-            "δ": self.transitions,
-            "ω": "output emission on accepted path",
-            "q0": self.start_state,
-            "F": sorted(self.accepting_states),
-        }
+SEPARATORS = [" ", ".", "-", "_", "/"]
+KEPT_SYMBOLS = ["+", "#"]
 
 
-class SkillCanonicalizationTransducer:
-    """Transducer-based canonicalizer designed around a lexicon of variations."""
+class Transducer:
 
-    def __init__(self, lexicon: dict[str, str] | None = None):
-        self.lexicon = lexicon or build_lexicon()
-        self.descriptor = self._build_descriptor()
+    def __init__(self, name):
+        self.name = name
+        self.fst = FST()
+        self.states = []
+        self.input_alphabet = []
+        self.output_alphabet = []
+        # Each transition is (from_state, input_symbol, to_state, output_list)
+        self.transitions = []
+        self.start_state = None
+        self.final_states = []
 
-    def _build_descriptor(self) -> FSTDescriptor:
-        keys = sorted({k for k in self.lexicon})
-        states = ["q0", "q1"]
-        alphabet = set()
-        output_alphabet = set(self.lexicon.values())
-        transitions: dict[tuple[str, str], tuple[str, str]] = {}
-        for key in keys:
-            alphabet.add(key)
-            transitions[("q0", key)] = ("q1", self.lexicon[key])
-        return FSTDescriptor(
-            states=states,
-            input_alphabet=alphabet,
-            output_alphabet=output_alphabet,
-            transitions=transitions,
-            start_state="q0",
-            accepting_states={"q1"},
-        )
+    def add_state(self, state):
+        if state not in self.states:
+            self.states.append(state)
 
-    def build_pyformlang_fst(self):
-        """Construct an FST if the dependency is available.
+    def set_start_state(self, state):
+        self.add_state(state)
+        self.start_state = state
+        self.fst.add_start_state(state)
 
-        When `pyformlang` is absent, the method returns a descriptor object that preserves
-        the formal structure required by the course documentation.
-        """
+    def add_final_state(self, state):
+        self.add_state(state)
+        if state not in self.final_states:
+            self.final_states.append(state)
+        self.fst.add_final_state(state)
 
-        if FST is None:
-            return self.descriptor
-        # Exercise scaffold: actual pyformlang FST creation is intentionally left as a
-        # reusable abstraction. Most teams will expand this in implementation.
-        return FST()
+    def add_transition(self, from_state, symbol, to_state, output):
+        self.add_state(from_state)
+        self.add_state(to_state)
+        if symbol not in self.input_alphabet:
+            self.input_alphabet.append(symbol)
+        for out_symbol in output:
+            if out_symbol not in self.output_alphabet:
+                self.output_alphabet.append(out_symbol)
+        self.transitions.append((from_state, symbol, to_state, output))
+        self.fst.add_transition(from_state, symbol, to_state, output)
 
-    def normalize(self, token: str) -> str:
-        """Apply the canonicalization transducer to a single token."""
-
-        return normalize_token(token, self.lexicon)
-
-    def normalize_many(self, tokens: list[str]) -> list[str]:
-        """Apply the canonicalization transducer to each token and remove duplicates."""
-
-        normalized: list[str] = []
-        for token in tokens:
-            result = self.normalize(token)
-            if result and result not in normalized:
-                normalized.append(result)
-        return normalized
+    def translate(self, symbols):
+        # Returns the output of the first accepted path, or None if the input is rejected
+        for output in self.fst.translate(symbols):
+            return output
+        return None
 
 
-def build_skill_transducer(lexicon: dict[str, str] | None = None) -> SkillCanonicalizationTransducer:
-    """Convenience constructor for the transducer used in the normalization stage."""
+def build_preprocessing_transducer():
+    transducer = Transducer("PREPROCESSING")
+    transducer.set_start_state("q0")
+    transducer.add_final_state("q0")
 
-    return SkillCanonicalizationTransducer(lexicon=lexicon)
+    for letter in string.ascii_uppercase:
+        transducer.add_transition("q0", letter, "q0", [letter.lower()])
+    for letter in string.ascii_lowercase:
+        transducer.add_transition("q0", letter, "q0", [letter])
+    for digit in string.digits:
+        transducer.add_transition("q0", digit, "q0", [digit])
+    for symbol in KEPT_SYMBOLS:
+        transducer.add_transition("q0", symbol, "q0", [symbol])
+    # The separators are deleted: their output is the empty string (epsilon)
+    for separator in SEPARATORS:
+        transducer.add_transition("q0", separator, "q0", [])
+    return transducer
+
+
+def build_category_transducer(category, variants):
+    # Builds a trie: words with the same prefix share the first states
+    transducer = Transducer(category)
+    transducer.set_start_state("q0")
+    transducer.add_final_state("qf")
+
+    next_state_number = 1
+    children = {}
+    for word in variants:
+        state = "q0"
+        for character in word:
+            key = (state, character)
+            if key not in children:
+                children[key] = "q" + str(next_state_number)
+                next_state_number = next_state_number + 1
+                # While reading the word the transducer writes nothing (epsilon)
+                transducer.add_transition(state, character, children[key], [])
+            state = children[key]
+        # At the end of the word it writes the canonical token
+        transducer.add_transition(state, END_MARK, "qf", [variants[word]])
+    return transducer
+
+
+def build_all_category_transducers():
+    transducers = {}
+    for category in VARIANTS_BY_CATEGORY:
+        transducers[category] = build_category_transducer(category, VARIANTS_BY_CATEGORY[category])
+    return transducers
+
+
+PREPROCESSING_TRANSDUCER = build_preprocessing_transducer()
+CATEGORY_TRANSDUCERS = build_all_category_transducers()
+
+
+def preprocess(text):
+    # "React.js" -> "reactjs". Returns None if the text has a character outside Sigma
+    output = PREPROCESSING_TRANSDUCER.translate(list(text))
+    if output is None:
+        return None
+    return "".join(output)
+
+
+def canonicalize(word, category):
+    # "reactjs" -> "REACT". Returns None if the word is not a known variant of the category
+    transducer = CATEGORY_TRANSDUCERS[category]
+    output = transducer.translate(list(word) + [END_MARK])
+    if output is None or len(output) == 0:
+        return None
+    return output[0]

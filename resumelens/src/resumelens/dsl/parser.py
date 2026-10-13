@@ -1,94 +1,107 @@
-from __future__ import annotations
+# Stage 4: parses and validates candidate profiles written in the ResumeLens DSL.
+#
+# There are three kinds of errors:
+# - lexical: a value does not match its terminal, for example an email without "@"
+# - syntactic: the structure is wrong, for example a missing "{" or a missing email
+# - semantic: the structure is right but the content makes no sense, for example
+#   the same profile evaluated twice or 80 years of experience
+# textX finds the first two kinds. The third kind is checked with object processors.
 
-import re
-from pathlib import Path
-from types import SimpleNamespace
+import os
 
-try:
-    from textx import metamodel_from_file
-except Exception:  # pragma: no cover - fallback for minimal environments
-    metamodel_from_file = None
+from textx import TextXSemanticError, TextXSyntaxError, get_location, metamodel_from_file
+
+GRAMMAR_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resume.tx")
+
+MAX_YEARS = 60
 
 
-class ResumeParser:
-    """Parser for the ResumeLens textX DSL.
+class ResumeValidationError(Exception):
 
-    This implementation attempts to use the textX metamodel first. If an environment or
-    grammar ambiguity prevents a clean parse, a small deterministic fallback parser is used
-    so the smoke-test pipeline still works while the formal grammar file remains in place.
-    """
+    def __init__(self, kind, message, line=None, column=None):
+        self.kind = kind
+        self.message = message
+        self.line = line
+        self.column = column
+        text = kind + " error: " + message
+        if line is not None:
+            text = text + " (line " + str(line) + ", column " + str(column) + ")"
+        Exception.__init__(self, text)
 
-    def __init__(self, grammar_path: str | Path | None = None):
-        grammar = Path(grammar_path) if grammar_path is not None else Path(__file__).with_name("resume.tx")
-        self.grammar_path = str(grammar)
-        self.metamodel = None
-        if metamodel_from_file is not None:
-            try:
-                self.metamodel = metamodel_from_file(str(grammar))
-            except Exception:
-                self.metamodel = None
 
-    def _manual_parse(self, text: str):
-        """Small fallback parser for the assignment's skeleton DSL."""
+def semantic_error(message, obj):
+    location = get_location(obj)
+    raise TextXSemanticError(message, line=location["line"], col=location["col"])
 
-        model = SimpleNamespace(
-            candidate=None,
-            contact=None,
-            experiences=[],
-            educations=[],
-            skills=[],
-            classification=None,
-        )
-        for raw_line in text.splitlines():
-            line = raw_line.strip()
-            if not line:
-                continue
-            if line.startswith("candidate "):
-                model.candidate = line[len("candidate "):].strip().strip('"')
-            elif line.startswith("email "):
-                email_value = line[len("email "):].strip()
-                model.contact = model.contact or {}
-                model.contact["email"] = email_value
-            elif line.startswith("phone "):
-                model.contact = model.contact or {}
-                model.contact["phone"] = line[len("phone "):].strip()
-            elif line.startswith("links "):
-                model.contact = model.contact or {}
-                model.contact.setdefault("links", []).append(line[len("links "):].strip())
-            elif line.startswith("experience "):
-                match = re.match(r'experience\s+"?(.*?)"?\s+years\s+(\d+)', line)
-                if match:
-                    model.experiences.append({"role": match.group(1), "years": int(match.group(2))})
-            elif line.startswith("education "):
-                match = re.match(r'education\s+"?(.*?)"?\s+institution\s+"?(.*?)"?$', line)
-                if match:
-                    model.educations.append({"degree": match.group(1), "institution": match.group(2)})
-            elif line.startswith("skill "):
-                model.skills.append(line[len("skill "):].strip())
-            elif line.startswith("profile "):
-                parts = line.split()
-                if len(parts) >= 4 and parts[2] == "status":
-                    model.classification = {"profile_name": parts[1], "status": parts[3]}
-                else:
-                    raise ValueError(f"Malformed profile line: {line}")
-        return model
 
-    def parse_text(self, text: str):
-        """Parse a DSL document and return the model object."""
+def check_candidate(candidate):
+    if candidate.name.strip() == "":
+        semantic_error("the candidate name can't be empty", candidate)
 
-        if self.metamodel is None:
-            return self._manual_parse(text)
-        try:
-            return self.metamodel.model_from_str(text)
-        except Exception:
-            return self._manual_parse(text)
 
-    def parse_file(self, path: str | Path):
-        """Parse a DSL file into a model object."""
+def check_experience(experience):
+    if experience.years > MAX_YEARS:
+        semantic_error("years of experience must be at most " + str(MAX_YEARS), experience)
 
-        if self.metamodel is None:
-            return self._manual_parse(Path(path).read_text(encoding="utf-8"))
-        try:
-            return self.metamodel.model_from_file(str(path))
-        except Exception:
-            return self._manual_parse(Path(path).read_text(encoding="utf-8"))
+
+def check_skills(skills):
+    seen = []
+    for token in skills.tokens:
+        if token in seen:
+            semantic_error("skill " + token + " is repeated", skills)
+        seen.append(token)
+
+
+def check_evaluation(evaluation):
+    seen = []
+    for result in evaluation.results:
+        if result.profile in seen:
+            semantic_error("profile " + result.profile + " is evaluated more than once", result)
+        seen.append(result.profile)
+
+
+def build_metamodel():
+    metamodel = metamodel_from_file(GRAMMAR_PATH)
+    metamodel.register_obj_processors({
+        "CandidateProfile": check_candidate,
+        "Experience": check_experience,
+        "Skills": check_skills,
+        "Evaluation": check_evaluation,
+    })
+    return metamodel
+
+
+METAMODEL = build_metamodel()
+
+
+# Terminals defined by regular expressions. When textX expected one of them and the text
+# did not match, the problem is in a value (lexical) and not in the structure (syntactic)
+LEXICAL_TERMINALS = ["Email", "Phone", "Url", "Token", "INT", "STRING"]
+
+
+def error_kind(message):
+    expected = message.split("Expected ")
+    if len(expected) > 1:
+        for terminal in LEXICAL_TERMINALS:
+            if expected[1].startswith(terminal):
+                return "Lexical"
+    return "Syntax"
+
+
+def parse_dsl(text):
+    # Returns the textX model, or raises ResumeValidationError explaining what is wrong
+    try:
+        return METAMODEL.model_from_str(text)
+    except TextXSyntaxError as error:
+        message = str(error.message)
+        raise ResumeValidationError(error_kind(message), message, error.line, error.col)
+    except TextXSemanticError as error:
+        raise ResumeValidationError("Semantic", str(error.message), error.line, error.col)
+
+
+def is_valid(text):
+    try:
+        parse_dsl(text)
+        return True
+    except ResumeValidationError:
+        return False

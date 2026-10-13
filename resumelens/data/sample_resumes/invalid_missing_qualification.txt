@@ -1,5 +1,5 @@
 Rosa Diaz
-Email: rosa@example.com
+Email: rosa.diaz@example.com
 Skills: Python, pandas, TensorFlow, PostgreSQL.
-Education: MSc in Applied Statistics.
-Experience: 2 years of experience in analytics.
+Education: MSc in Applied Mathematics.
+2 years of experience in analytics dashboards.

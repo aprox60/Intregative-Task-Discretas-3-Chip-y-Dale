@@ -1,0 +1,40 @@
+{
+  "name": "Rosa Diaz",
+  "emails": [
+    "rosa.diaz@example.com"
+  ],
+  "phones": [],
+  "links": [],
+  "programming_languages": [
+    "Python"
+  ],
+  "frameworks": [],
+  "libraries": [
+    "pandas",
+    "TensorFlow"
+  ],
+  "databases": [
+    "PostgreSQL"
+  ],
+  "tools": [],
+  "other_qualifications": [],
+  "education": [
+    {
+      "degree": "MSc",
+      "field": "Applied Mathematics",
+      "institution": ""
+    }
+  ],
+  "experience": [
+    {
+      "years": 2,
+      "description": "analytics dashboards"
+    }
+  ],
+  "skills_section": [
+    "Python",
+    "pandas",
+    "TensorFlow",
+    "PostgreSQL"
+  ]
+}
