@@ -1,73 +1,155 @@
 # ResumeLens: Formal Language-Based Resume Screening
 
-This project is a university skeleton for the ICESI 2026-2 Integrative Task 1 in Computación y Estructuras Discretas III. The objective is to build a formal-language pipeline that checks whether an explicit qualification pattern is present in a résumé, without ranking candidates or making hiring decisions.
+ResumeLens reads plain-text résumés and checks whether the qualifications written in them satisfy the qualification pattern of four professional profiles. Each step uses a formal model from *Computación y Estructuras Discretas III*:
+
+| Stage | Formal model | Library |
+|---|---|---|
+| 1. Extraction | regular expressions | `re` |
+| 2. Normalization | finite-state transducers | `pyformlang` |
+| 3. Classification | DFA, NFA and ε-NFA | `pyformlang` |
+| 4. Candidate profile language | context-free grammar (DSL) | `textX` |
+
+ResumeLens **does not rank candidates or make hiring decisions**. It only reports whether explicit qualifications match formally defined patterns.
 
 ## Team and environment
-- IDE: Visual Studio Code
-- Team members: Ivan Quintero Sanchez, Valeria Valencia
-- Course: Computación y Estructuras Discretas III
-- Institution: ICESI
-- Academic period: 2026-2
+
+- **Team:** Ivan Quintero Sanchez, Valeria Valencia
+- **Course:** Computación y Estructuras Discretas III, Universidad Icesi, 2026-2
+- **IDE:** Visual Studio Code
+- **Language:** Python 3.11+ (developed with Python 3.12)
+
+## Profiles
+
+| Profile | Area | Automaton | Pattern (in order; *optional*) |
+|---|---|---|---|
+| Full Stack Developer | software | ε-NFA | frontend language → frontend framework → backend → database → *API* → Git |
+| Machine Learning Engineer | AI/data | DFA | Python → Pandas/NumPy → ML framework → database → Git |
+| **Backend Developer** (ours) | software | NFA | language → backend framework → database → REST/GraphQL → Docker/Kubernetes → Git |
+| **Data Scientist** (ours) | AI/data | ε-NFA | Python/R → Pandas/NumPy → statistics → visualization → *scikit-learn* → database |
+
+The profiles are JSON files in `src/resumelens/profiles/`.
 
 ## Setup
 
-1. Create a virtual environment:
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate
-   ```
-   On Windows:
-   ```powershell
-   py -m venv .venv
-   .\.venv\Scripts\Activate.ps1
-   ```
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Run the CLI:
-   ```bash
-   python -m resumelens.ui.cli --help
-   ```
-4. Run the tests:
-   ```bash
-   pytest
-   ```
-
-## How to run the sample pipeline
-
-From the project root:
+From the `resumelens` folder:
 
 ```bash
-PYTHONPATH=src python -m resumelens.ui.cli data/sample_resumes/wednesday_addams.txt --profile all
+python -m venv .venv
 ```
 
-The CLI reads the raw résumé text, extracts strings, normalizes them to canonical tokens, classifies them according to profile automata, and optionally emits a DSL-formatted candidate model plus HTML output.
+Activate it (Windows PowerShell: `.\.venv\Scripts\Activate.ps1`, Git Bash: `source .venv/Scripts/activate`, Linux/macOS: `source .venv/bin/activate`), then:
 
-## Delivery constraints (do not execute)
+```bash
+pip install -r requirements.txt
+```
 
-- At least 10 meaningful commits, spaced at least 2 hours apart.
-- Contributions must be traceable per team member via commit history.
-- Team size: 2 members.
-- Deadline: 11 October 2026.
+```bash
+pip install -e .
+```
 
-See `docs/commit-plan.md` for a suggested commit sequence.
+`pip install -e .` installs the package in editable mode, so `python -m resumelens` works from any folder. Without it, set `PYTHONPATH=src` before running.
+
+## Usage
+
+Interactive menu (analyze a sample, a file or pasted text, and see the profiles):
+
+```bash
+python -m resumelens
+```
+
+Analyze one résumé:
+
+```bash
+python -m resumelens data/sample_resumes/wednesday_addams.txt
+```
+
+Options:
+
+| Option | Effect |
+|---|---|
+| `--details` | shows every transducer step (`React.js → reactjs → REACT`) and the generated DSL |
+| `--save` | saves the extraction JSON, the DSL (`.resume`) and the HTML in `data/output/` |
+| `--output-html PATH` | saves only the HTML report in `PATH` |
+| `--all` | analyzes every sample résumé, saves all the outputs in `data/output/` and prints a summary table |
+
+Summary of the sample résumés (`python -m resumelens --all`):
+
+```text
+Resume                              Full        Machine     Backend     Data        DSL
+---------------------------------------------------------------------------------------
+alex_rivera_backend.txt             -           -           ACCEPTED    -           valid
+invalid_edge_case.txt               -           -           -           -           rejected (syntax)
+invalid_missing_qualification.txt   -           -           -           -           valid
+kim_possible_multi_profile.txt      ACCEPTED    -           ACCEPTED    -           valid
+mary_jane_watson.txt                -           ACCEPTED    -           -           valid
+nina_patel_data_scientist.txt       -           -           -           ACCEPTED    valid
+wednesday_addams.txt                ACCEPTED    -           -           -           valid
+```
+
+The generated JSON, DSL (`.resume`) and HTML files of every sample are already in `data/output/`.
+
+Example output (shortened):
+
+```text
+Stage 2 - Normalization (finite-state transducers)
+Canonical tokens: JAVASCRIPT, REACT, NODE_JS, POSTGRESQL, GIT
+
+Stage 3 - Classification (finite automata)
+Full Stack Developer [ENFA]: ACCEPTED
+    sequence: JAVASCRIPT, REACT, NODE_JS, POSTGRESQL, GIT
+Machine Learning Engineer [DFA]: REJECTED
+    sequence: POSTGRESQL, GIT
+    missing:  LANGUAGE, DATA_LIBRARY, ML_FRAMEWORK
+...
+Stage 4 - Candidate profile DSL (textX)
+The candidate profile is VALID for the grammar.
+```
+
+## Tests
+
+```bash
+python -m pytest
+```
+
+There is one test file per stage, plus end-to-end and interface tests. See [docs/03-test-cases.md](docs/03-test-cases.md).
+
+## Regenerating the formal definitions and diagrams
+
+The 7-tuples of the transducers, the 5-tuples of the automata and their Mermaid diagrams in `docs/diagrams/` are generated from the pyformlang objects:
+
+```bash
+python -m resumelens.docs_export
+```
+
+## Documentation
+
+| Document | Content |
+|---|---|
+| [00-literature-review.md](docs/00-literature-review.md) | literature review and how it shaped the design |
+| [01-module-design.md](docs/01-module-design.md) | modules, functions, inputs and outputs |
+| [02-formalization.md](docs/02-formalization.md) | regular expressions, transducers (7-tuples), automata (5-tuples), grammar (EBNF) |
+| [03-test-cases.md](docs/03-test-cases.md) | test design and scenarios |
+| [04-architecture.md](docs/04-architecture.md) | pipeline diagram, folder structure, design decisions |
+| [05-presentation-outline.md](docs/05-presentation-outline.md) | outline of the 10-minute presentation |
+| [poster/poster-outline.md](docs/poster/poster-outline.md) | content of the research poster |
+| [diagrams/](docs/diagrams/README.md) | generated formal definitions and diagrams |
 
 ## Project structure
 
 ```text
 resumelens/
-├── README.md
-├── requirements.txt
-├── pyproject.toml
-├── .gitignore
-├── docs/
 ├── src/resumelens/
-├── data/
-├── tests/
-└── .pytest_cache/  # ignored by git
+│   ├── extraction/        stage 1 - regular expressions
+│   ├── normalization/     stage 2 - transducers and canonical order
+│   ├── classification/    stage 3 - automata
+│   ├── profiles/          the four profiles (JSON)
+│   ├── dsl/               stage 4 - textX grammar, generator, HTML
+│   ├── ui/                command line interface
+│   ├── models.py
+│   ├── pipeline.py
+│   └── docs_export.py
+├── data/sample_resumes/   example résumés
+├── data/output/           generated JSON, DSL and HTML
+├── docs/                  design documents
+└── tests/
 ```
-
-## Notes
-
-This repository intentionally contains a skeleton and a minimal smoke-tested reference pipeline, not a finished production system. The design is formal-language-oriented and pattern-based, consistent with the assignment requirements.

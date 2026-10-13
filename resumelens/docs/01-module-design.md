@@ -1,127 +1,97 @@
 # Module Design
 
-## Overview
+ResumeLens is a pipeline of four stages. Each one uses a different formal model and lives in its own package. Every stage reads only the output of the previous one, so each one can be tested on its own.
 
-The project follows a four-stage pipeline:
+```text
+resume text ─► extraction ─► normalization ─► classification ─► dsl ─► HTML
+                 (regex)       (FST + sort)       (automata)      (CFG)
+```
 
-Raw résumé text -> Regex extraction -> FST normalization -> Automata classification -> textX validation + visualization.
+## Data model (`src/resumelens/models.py`)
 
-Each stage is separated into its own module with a clear contract.
+| Class | Fields | Produced by |
+|---|---|---|
+| `Education` | `degree`, `field`, `institution` | extraction |
+| `Experience` | `years`, `description` | extraction |
+| `ExtractionResult` | `name`, `emails`, `phones`, `links`, six technical lists (`programming_languages`, `frameworks`, `libraries`, `databases`, `tools`, `other_qualifications`), `education`, `experience`, `skills_section` | extraction |
+| `PipelineResult` | `extraction`, `normalization`, `sorted_by_profile`, `classification`, `dsl_text`, `model`, `html`, `error` | pipeline |
 
-## 1. Extraction module
+`ExtractionResult` methods: `get_technical_items()`, `get_all_technical_strings()`, `get_unrecognized_skills()`, `to_dict()`, `to_json()`.
+`PipelineResult` methods: `get_accepted_profiles()`.
 
-### Files
-- `src/resumelens/extraction/patterns.py`
-- `src/resumelens/extraction/extractor.py`
+## 1. Extraction: regular expressions (`extraction/`)
 
-### Responsibility
-Extract candidate evidence from raw résumé text using regular expressions. The extractor records raw matches and their categories but does not decide whether they satisfy a niche profile.
+| Function | Input | Output |
+|---|---|---|
+| `patterns.py` (module) | — | compiled regexes: `NAME_REGEX`, `EMAIL_REGEX`, `PHONE_REGEX`, `URL_REGEX`, `TECHNICAL_REGEXES` (category → list of regexes), `EDUCATION_REGEX`, `EXPERIENCE_REGEX`, `SKILLS_SECTION_REGEX`, and `DESCRIPTIONS` |
+| `find_all(regex, text)` | regex, text | list of matched strings without repetitions |
+| `find_all_in_order(regexes, text)` | several regexes, text | matches in text order; a match inside a longer one is dropped |
+| `extract_name(text)` | text | first line if it looks like a name, else `""` |
+| `extract_education(text)` | text | `list[Education]` |
+| `extract_experience(text)` | text | `list[Experience]` |
+| `extract_skills_section(text)` | text | items written after `Skills:` |
+| `extract_resume(text)` | text | `ExtractionResult` |
+| `ResumeExtractor(text)` | text | `.extract()`, `.to_json()`, `.save_json(path)`, `ResumeExtractor.from_file(path)` |
 
-### Main functions
-- `build_pattern_catalog() -> dict[str, re.Pattern[str]]`
-- `extract_skills(text: str) -> list[str]`
-- `extract_contact_info(text: str) -> dict[str, list[str]]`
-- `extract_academic_qualifications(text: str) -> list[str]`
-- `extract_experience(text: str) -> list[str]`
-- `extract_candidate_evidence(text: str) -> dict[str, list[str]]`
+## 2. Normalization: finite-state transducers (`normalization/`)
 
-### Input
-- Raw text from a résumé file.
+| Function | Input | Output |
+|---|---|---|
+| `variants.py` (module) | — | `VARIANTS_BY_CATEGORY`: category → {preprocessed variant → canonical token} |
+| `Transducer` | — | wrapper around `pyformlang.fst.FST` that also stores Q, Σ, Γ, δ/ω, q0 and F |
+| `build_preprocessing_transducer()` | — | the one-state transducer that lower-cases and deletes separators |
+| `build_category_transducer(category, variants)` | name, variants | trie transducer that writes the canonical token on `$` |
+| `preprocess(text)` | raw string | preprocessed string, or `None` if rejected |
+| `canonicalize(word, category)` | preprocessed string, category | canonical token, or `None` |
+| `normalize_string(raw, category)` | raw string, category | canonical token, or `None` |
+| `normalize_extraction(extraction)` | `ExtractionResult` | `NormalizationResult` (`tokens`, `steps`, `unknown`) |
+| `sort_for_profile(tokens, profile)` | tokens, `Profile` | the profile's tokens in canonical order |
+| `sort_for_all_profiles(tokens, profiles)` | tokens, profiles | profile name → sorted sequence |
 
-### Output
-- A structured dictionary with extracted values for contact data, skills, qualifications, and experience.
+## 3. Classification: finite automata (`classification/` and `profiles/`)
 
-## 2. Normalization module
+| Function | Input | Output |
+|---|---|---|
+| `profiles/*.json` | — | one file per profile: `name`, `display_name`, `area`, `automaton_type`, `description`, ordered `groups` (`name`, `tokens`, `required`) |
+| `load_profile(path)` | JSON path | `Profile`; checks disjoint groups and that optional groups only appear in ENFAs |
+| `load_profiles()` / `PROFILES` | — | the four profiles in project order |
+| `ProfileAutomaton(profile)` | `Profile` | pyformlang DFA, NFA or ε-NFA plus its 5-tuple; `.accepts(tokens)`, `.missing_groups(tokens)` |
+| `build_automata(profiles)` / `AUTOMATA` | profiles | profile name → `ProfileAutomaton` |
+| `classify(tokens, profile_name)` | sorted tokens, name | `True` / `False` |
+| `classify_all_profiles(sorted_by_profile)` | name → sequence | name → `True` / `False` |
+| `status_text(accepted)` | bool | `"ACCEPTED"` / `"REJECTED"` |
 
-### Files
-- `src/resumelens/normalization/lexicon.py`
-- `src/resumelens/normalization/transducers.py`
-- `src/resumelens/normalization/sorter.py`
+## 4. Candidate profile DSL: context-free grammar (`dsl/`)
 
-### Responsibility
-Map extracted strings to canonical tokens. This stage preserves semantics but removes variants such as `JavaScript`, `Javascript`, and `JS`.
+| Function | Input | Output |
+|---|---|---|
+| `resume.tx` | — | textX grammar of the candidate profile language |
+| `generate_dsl(extraction, tokens, classification)` | results of stages 1–3 | DSL text |
+| `parse_dsl(text)` | DSL text | textX model, or raises `ResumeValidationError(kind, message, line, column)` |
+| `is_valid(text)` | DSL text | `True` / `False` |
+| `render_html(model)` | validated textX model | HTML page |
 
-### Main functions
-- `build_lexicon() -> dict[str, str]`
-- `normalize_token(token: str, lexicon: dict[str, str]) -> str`
-- `normalize_tokens(tokens: list[str]) -> list[str]`
-- `sort_tokens(tokens: list[str], profile_name: str) -> list[str]`
+## Pipeline (`pipeline.py`)
 
-### Input
-- Extracted strings from stage 1.
+| Function | Input | Output |
+|---|---|---|
+| `run_resume_pipeline(text)` | résumé text | `PipelineResult` |
+| `run_resume_file(path)` | path to a `.txt` résumé | `PipelineResult` |
 
-### Output
-- Canonical skill tokens in a stable, profile-aware order.
+## User interface (`ui/cli.py`, `__main__.py`)
 
-## 3. Classification module
+| Function | Input | Output |
+|---|---|---|
+| `main(arguments)` | command-line arguments | runs one résumé, or opens the menu when no file is given |
+| `interactive_menu(ask)` | input function | menu: analyze a sample, analyze a file, paste a résumé, show profiles |
+| `format_report(result, details)` | `PipelineResult` | stage-by-stage text report |
+| `save_outputs(result, base_name, folder)` | result, name | writes `.json`, `.resume` (DSL) and `.html` |
+| `show_profiles()` | — | text with the groups of each profile |
+| `run_batch(folder, output_folder)` | folder of résumés | runs every `.txt`, saves its outputs and returns a summary table (`--all`) |
 
-### Files
-- `src/resumelens/classification/profiles.py`
-- `src/resumelens/classification/automata.py`
-- `src/resumelens/classification/classifier.py`
+## Documentation export (`docs_export.py`)
 
-### Responsibility
-Check whether a normalized token sequence satisfies the explicit pattern of each profile.
-
-### Main functions
-- `build_profile_automaton(profile_config: dict) -> NFA | DFA`
-- `classify(tokens: list[str], profile_name: str) -> bool`
-- `classify_all_profiles(tokens: list[str]) -> dict[str, bool]`
-
-### Input
-- Sorted canonical tokens.
-
-### Output
-- Acceptance/rejection result per profile, without ranking or hiring decisions.
-
-## 4. DSL module
-
-### Files
-- `src/resumelens/dsl/resume.tx`
-- `src/resumelens/dsl/parser.py`
-- `src/resumelens/dsl/validator.py`
-- `src/resumelens/dsl/generator.py`
-- `src/resumelens/dsl/visualizer.py`
-
-### Responsibility
-Validate a candidate model using a textual DSL and render a small HTML page from the accepted output.
-
-### Main functions
-- `parse_resume_text(text: str) -> Model`
-- `validate_resume_model(model: object) -> None`
-- `candidate_to_dsl(candidate: Candidate) -> str`
-- `render_html(candidate: Candidate) -> str`
-
-### Input
-- Pipeline result object containing normalized skills, profile decisions, and candidate metadata.
-
-### Output
-- A structured validated DSL model and a generated HTML visualization.
-
-## Data model
-
-### Files
-- `src/resumelens/models.py`
-
-The project defines dataclasses for candidate information, extracted items, and classification results.
-
-### Core dataclasses
-- `ExtractedItem`
-- `Candidate`
-- `ProfileResult`
-- `PipelineResult`
-
-## Pipeline orchestrator
-
-### File
-- `src/resumelens/pipeline.py`
-
-### Responsibility
-Coordinate the entire process from raw text to validated output. It exposes a single high-level entry point used by both tests and CLI.
-
-### Main function
-- `run_resume_pipeline(text: str, profile_name: str | None = None) -> PipelineResult`
-
-## TODO
-- Expand the profile schema for PROFILE_3_TODO and PROFILE_4_TODO.
-- Add more explicit type contracts for DSL validation errors and HTML rendering output.
+| Function | Output |
+|---|---|
+| `export_transducers()` | `docs/diagrams/transducers/*.md`: 7-tuple and Mermaid diagram of each transducer |
+| `export_automata()` | `docs/diagrams/automata/*.md`: 5-tuple and Mermaid diagram of each automaton |

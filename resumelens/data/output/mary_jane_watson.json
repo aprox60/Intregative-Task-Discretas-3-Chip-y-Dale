@@ -1,0 +1,51 @@
+{
+  "name": "Mary Jane Watson",
+  "emails": [
+    "mj.watson@dailybugle.com"
+  ],
+  "phones": [
+    "+1 212 555 0123"
+  ],
+  "links": [
+    "linkedin.com/in/mjwatson"
+  ],
+  "programming_languages": [
+    "Python"
+  ],
+  "frameworks": [],
+  "libraries": [
+    "Pandas",
+    "NumPy",
+    "Scikit-learn",
+    "TensorFlow"
+  ],
+  "databases": [
+    "SQL"
+  ],
+  "tools": [
+    "Git"
+  ],
+  "other_qualifications": [],
+  "education": [
+    {
+      "degree": "MSc",
+      "field": "Data Science",
+      "institution": "Empire State University"
+    }
+  ],
+  "experience": [
+    {
+      "years": 2,
+      "description": "developing predictive models and data-processing pipelines"
+    }
+  ],
+  "skills_section": [
+    "Python",
+    "Pandas",
+    "NumPy",
+    "Scikit-learn",
+    "TensorFlow",
+    "SQL",
+    "Git"
+  ]
+}
